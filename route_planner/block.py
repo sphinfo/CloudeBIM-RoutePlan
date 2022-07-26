@@ -34,7 +34,7 @@ class Block(object):
         makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
         _rearranged_block = rearranged_block.copy()
         _rearranged_block.reverse()
-        with open(f'./output/csv/{input_file_name}/{now}_1-1_output.csv', 'w', newline='\n', encoding='ansi') as csvfile:
+        with open(f'./output/csv/{input_file_name}/{now}_1-1_output.csv', 'w', newline='\n') as csvfile:
             cw = csv.writer(csvfile)
             for i_block in _rearranged_block:
                 cw.writerow(i_block)
