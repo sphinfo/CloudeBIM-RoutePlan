@@ -371,7 +371,7 @@ class MovementPlan(object):
         now = datetime.now().strftime('%Y%m%d%H%M%S')
         makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
         
-        with open(f'./output/csv/{input_file_name}/{now}_movement_output.csv', 'w', newline='\n', encoding='ansi') as csvfile:
+        with open(f'./output/csv/{input_file_name}/{now}_movement_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=['Direction', 'x1', 'y1', 'z1', 'x2', 'y2', 'z2'])
             writer.writeheader()
             for m in movement_plan:
@@ -472,7 +472,7 @@ class Grader(RoutePlan):
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_grader_1-3_output.csv', 'w', newline='\n', encoding='ansi') as csvfile:
+        with open(f'./output/csv/{input_file_name}/{now}_grader_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
@@ -749,7 +749,7 @@ class Paver(RoutePlan):
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_paver_1-3_output.csv', 'w', newline='\n', encoding='ansi') as csvfile:
+        with open(f'./output/csv/{input_file_name}/{now}_paver_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
@@ -1025,7 +1025,7 @@ class Roller(RoutePlan):
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_roller_1-3_output.csv', 'w', newline='\n', encoding='ansi') as csvfile:
+        with open(f'./output/csv/{input_file_name}/{now}_roller_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
@@ -1317,7 +1317,7 @@ class Dozer(RoutePlan):
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_dozer_1-3_output.csv', 'w', newline='\n', encoding='ansi') as csvfile:
+        with open(f'./output/csv/{input_file_name}/{now}_dozer_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
