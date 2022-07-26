@@ -79,7 +79,7 @@ class Alloc(object):
                 i_output.append(f'{block_name} {dkj}')
             output.append(i_output)
 
-        with open(f'./output/csv/{input_file_name}/{now}_{equipment}_1-2_output.csv', 'w', newline='\n', encoding='ansi') as csvfile:
+        with open(f'./output/csv/{input_file_name}/{now}_{equipment}_1-2_output.csv', 'w', newline='\n') as csvfile:
             cw = csv.writer(csvfile)
             for i_output in output:
                 cw.writerow(i_output)
