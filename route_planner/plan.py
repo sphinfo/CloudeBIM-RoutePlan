@@ -921,11 +921,11 @@ class Paver(RoutePlan):
                     if _work_direction > 0:
                         # 현재 할당셀 집합[-1]의 [-1] Center 좌표에서 출발해서 다음 할당셀 집합 [-1]의 [0] Center 좌표에 도착하는 최단 경로를 계획 경로에 저장
                         logging.getLogger('plan').debug(f'현재 할당셀 집합[-1]의 [-1]({self.converted_block.get(v_v_l[-1][-1]).get("BlName")}) Center 좌표에서 출발해서 다음 할당셀 집합 [-1]의 [0] ({self.converted_block.get(list(allocated_cells.get(list(allocated_cells.keys())[index + 1]).values())[-1][0])})Center 좌표에 도착하는 최단 경로를 계획 경로에 저장')
-                        self.paver_route_plan(self.converted_block.get(v_v_l[-1][-1]), self.converted_block.get(list(allocated_cells.get(list(allocated_cells.keys())[index + 1]).values())[-1][0]), c_c_i + 1)
+                        self.paver_route_plan(self.converted_block.get(v_v_l[-1][-1]), self.converted_block.get(list(allocated_cells.get(list(allocated_cells.keys())[index + 1]).values())[-1][0]))
                     else:
                         # 현재 할당셀 집합[0]의 [-1] Center 좌표에서 출발해서 다음 할당셀 집합 [0]의 [0] Center 좌표에 도착하는 최단 경로를 계획 경로에 저장
                         logging.getLogger('plan').debug(f'현재 할당셀 집합[0]의 [-1]({self.converted_block.get(v_v_l[0][-1])}) Center 좌표에서 출발해서 다음 할당셀 집합 [0]의 [0]({self.converted_block.get(list(allocated_cells.get(list(allocated_cells.keys())[index + 1]).values())[0][0])}) Center 좌표에 도착하는 최단 경로를 계획 경로에 저장')
-                        self.paver_route_plan(self.converted_block.get(v_v_l[0][-1]), self.converted_block.get(list(allocated_cells.get(list(allocated_cells.keys())[index + 1]).values())[0][0]), c_c_i + 1)
+                        self.paver_route_plan(self.converted_block.get(v_v_l[0][-1]), self.converted_block.get(list(allocated_cells.get(list(allocated_cells.keys())[index + 1]).values())[0][0]))
                     _work_direction = -_work_direction
                     logging.getLogger('plan').debug(f'alpha({_work_direction}) = -alpha({-_work_direction})')
 
