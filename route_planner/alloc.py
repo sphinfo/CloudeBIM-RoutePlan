@@ -60,11 +60,11 @@ class Alloc(object):
     # output excel
     @staticmethod
     @log_decorator('할당셀 알고리즘 결과 저장')
-    def save_output_csv(input_file_name: str, equipment: str, rearranged_block: list, allocated_cells: dict, converted_block: dict):
+    def save_output_csv(output_path: str, input_file_name: str, equipment: str, rearranged_block: list, allocated_cells: dict, converted_block: dict):
         _rearranged_block = rearranged_block.copy()
         _rearranged_block.reverse()
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         _converted_allocated_cells = {}
         for k, j_block in allocated_cells.items():
             for key_j, values_j in j_block.items():
@@ -79,7 +79,7 @@ class Alloc(object):
                 i_output.append(f'{block_name} {dkj}')
             output.append(i_output)
 
-        with open(f'./output/csv/{input_file_name}/{now}_{equipment}_1-2_output.csv', 'w', newline='\n') as csvfile:
+        with open(f'{output_path}/{input_file_name}_1-2_output.csv', 'w', newline='\n') as csvfile:
             cw = csv.writer(csvfile)
             for i_output in output:
                 cw.writerow(i_output)
