@@ -1,11 +1,11 @@
 # COPYRIGHT ⓒ 2021 HANYANG UNIVERSITY. ALL RIGHTS RESERVED.
 import os
 import csv, pyodbc
+import geojson
 import time
 from functools import wraps
 
 MDB_DRIVER = '{Microsoft Access Driver (*.mdb)}'
-
 
 def read_mdb(full_path, table_name):
     con, cur, result = None, None, []
@@ -43,6 +43,24 @@ def read_csv(full_path):
         rows = [dict(row) for row in reader]
     return rows
 
+def read_geojson(full_path):
+    if not os.path.exists(full_path):
+        raise Exception(f'File not found, {full_path}')
+
+    rows = []
+    with open(full_path, 'r') as jsonfile:
+        reader = geojson.loads(jsonfile.read())
+        features = reader['features']
+        for feature in features:
+            etc = ''
+            coordinates = feature.geometry.coordinates
+            for parts in coordinates:
+                for coordinate in parts:
+                    etc += str(coordinate[0])+","+str(coordinate[1])+",0"
+                etc+";"
+            feature.properties["etc"] = etc
+            rows.append(feature.properties)
+    return rows
 
 def file_name(input_path):
     try:
