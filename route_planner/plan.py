@@ -273,10 +273,10 @@ class RoutePlan(object):
     # PNG
     @staticmethod
     @log_decorator('계획 경로 알고리즘 PNG 저장')
-    def save_output_png(input_file_name: str, route_plan, rearranged_block, converted_block, allocated_cells, equip_type, compaction_count: int = 1):
+    def save_output_png(output_path: str, input_file_name: str, route_plan, rearranged_block, converted_block, allocated_cells, equip_type, compaction_count: int = 1):
         width_ratio, height_ratio = 5 / 4, 5 / 7
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'{OUTPUT_PATH}/png/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         width, width_length, height, height_length = 15, len(rearranged_block[0]), 10.5, len(rearranged_block)
         sample_colors, color_map, _converted_allocated_cells, k = COLOR_LIST.copy(), {}, {}, 1
         for k, j_block in allocated_cells.items():
@@ -335,7 +335,7 @@ class RoutePlan(object):
             plt.arrow(x1, y1, x2, y2, width=0.3, head_width=1.2 if next_arrow else 0, head_length=1 if next_arrow else 0, fc=to_rgba(color_map[str(k)]), ec=to_rgba(color_map[str(k)]))
         
         
-        plt.savefig(f'{OUTPUT_PATH}/png/{input_file_name}/{equip_type}_{now}.png', dpi=DPI)
+        plt.savefig(f'{output_path}/{input_file_name}_{equip_type}.png', dpi=DPI)
         plt.clf()
 
 
@@ -466,13 +466,13 @@ class Grader(RoutePlan):
 
     @staticmethod
     @log_decorator('그레이더 계획 경로 알고리즘 결과 저장')
-    def save_output_csv(input_file_name: str, _route_plan: list):
+    def save_output_csv(output_path: str, input_file_name: str, _route_plan: list):
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_grader_1-3_output.csv', 'w', newline='\n') as csvfile:
+        with open(f'{output_path}/{input_file_name}_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
@@ -664,10 +664,10 @@ class Grader(RoutePlan):
     # PNG
     @staticmethod
     @log_decorator('그레이더 계획 경로 알고리즘 PNG 저장')
-    def save_output_png(input_file_name: str, _route_plan, rearranged_block, converted_block, allocated_cells, equip_type):
+    def save_output_png(output_path: str, input_file_name: str, _route_plan, rearranged_block, converted_block, allocated_cells, equip_type):
         width_ratio, height_ratio = 5 / 4, 5 / 7
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'{OUTPUT_PATH}/png/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         width, width_length, height, height_length = 15, len(rearranged_block[0]), 10.5, len(rearranged_block)
         sample_colors, color_map, _converted_allocated_cells, k = COLOR_LIST.copy(), {}, {}, 1
         for k, j_block in allocated_cells.items():
@@ -731,7 +731,7 @@ class Grader(RoutePlan):
             plt.arrow(x1, y1, x2, y2, width=0.3, head_width=1.2 if next_arrow else 0, head_length=1 if next_arrow else 0, fc=to_rgba(color_map[str(k)]), ec=to_rgba(color_map[str(k)]))
         
         
-        plt.savefig(f'{OUTPUT_PATH}/png/{input_file_name}/{equip_type}_{now}.png', dpi=DPI)
+        plt.savefig(f'{output_path}/{input_file_name}_{equip_type}.png', dpi=DPI)
         plt.clf()
 
 class Paver(RoutePlan):
@@ -743,13 +743,13 @@ class Paver(RoutePlan):
 
     @staticmethod
     @log_decorator('페이버 계획 경로 알고리즘 결과 저장')
-    def save_output_csv(input_file_name: str, _route_plan: list):
+    def save_output_csv(output_path : str, input_file_name: str, _route_plan: list):
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_paver_1-3_output.csv', 'w', newline='\n') as csvfile:
+        with open(f'{output_path}/{input_file_name}_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
@@ -940,10 +940,10 @@ class Paver(RoutePlan):
     # PNG
     @staticmethod
     @log_decorator('페이버 계획 경로 알고리즘 PNG 저장')
-    def save_output_png(input_file_name: str, _route_plan, rearranged_block, converted_block, allocated_cells, equip_type):
+    def save_output_png(output_path:str, input_file_name: str, _route_plan, rearranged_block, converted_block, allocated_cells, equip_type):
         width_ratio, height_ratio = 5 / 4, 5 / 7
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'{OUTPUT_PATH}/png/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         width, width_length, height, height_length = 15, len(rearranged_block[0]), 10.5, len(rearranged_block)
         sample_colors, color_map, _converted_allocated_cells, k = COLOR_LIST.copy(), {}, {}, 1
         for k, j_block in allocated_cells.items():
@@ -1007,7 +1007,7 @@ class Paver(RoutePlan):
             plt.arrow(x1, y1, x2, y2, width=0.3, head_width=1.2 if next_arrow else 0, head_length=1 if next_arrow else 0, fc=to_rgba(color_map[str(k)]), ec=to_rgba(color_map[str(k)]))
         
         
-        plt.savefig(f'{OUTPUT_PATH}/png/{input_file_name}/{equip_type}_{now}.png', dpi=DPI)
+        plt.savefig(f'{output_path}/{input_file_name}_{equip_type}.png', dpi=DPI)
         plt.clf()
 
 class Roller(RoutePlan):
@@ -1019,13 +1019,13 @@ class Roller(RoutePlan):
 
     @staticmethod
     @log_decorator('롤러 계획 경로 알고리즘 결과 저장')
-    def save_output_csv(input_file_name: str, _route_plan: list):
+    def save_output_csv(output_path: str, input_file_name: str, _route_plan: list):
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_roller_1-3_output.csv', 'w', newline='\n') as csvfile:
+        with open(f'{output_path}/{input_file_name}_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
@@ -1234,10 +1234,10 @@ class Roller(RoutePlan):
     # PNG
     @staticmethod
     @log_decorator('롤러 계획 경로 알고리즘 PNG 저장')
-    def save_output_png(input_file_name: str, _route_plan, rearranged_block, converted_block, allocated_cells, equip_type, compaction_count: int = 1):
+    def save_output_png(output_path: str, input_file_name: str, _route_plan, rearranged_block, converted_block, allocated_cells, equip_type, compaction_count: int = 1):
         width_ratio, height_ratio = 5 / 4, 5 / 7
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'{OUTPUT_PATH}/png/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         width, width_length, height, height_length = 15, len(rearranged_block[0]), 10.5, len(rearranged_block)
         sample_colors, color_map, _converted_allocated_cells, k = COLOR_LIST.copy(), {}, {}, 1
         for k, j_block in allocated_cells.items():
@@ -1302,7 +1302,7 @@ class Roller(RoutePlan):
                 plt.arrow(x1, y1, x2, y2, width=0.3, head_width=1.2 if next_arrow else 0, head_length=1 if next_arrow else 0, fc=to_rgba(color_map[str(k)]), ec=to_rgba(color_map[str(k)]))
             
             
-            plt.savefig(f'{OUTPUT_PATH}/png/{input_file_name}/{equip_type}_{now}_{c_c_i}.png', dpi=DPI)
+            plt.savefig(f'{output_path}/{input_file_name}_{equip_type}_{now}.png', dpi=DPI)
             plt.clf()
 
 class Dozer(RoutePlan):
@@ -1311,13 +1311,13 @@ class Dozer(RoutePlan):
 
     @staticmethod
     @log_decorator('도저 계획 경로 알고리즘 결과 저장')
-    def save_output_csv(input_file_name: str, _route_plan: list):
+    def save_output_csv(output_path: str, input_file_name: str, _route_plan: list):
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         route_plan = [{k: v for k, v in route.items() if k in ['Timeline', 'BlName', 'Xcoord', 'Ycoord', 'Zcoord']} for route in _route_plan]
         fieldnames = list(route_plan[0].keys())
         
-        with open(f'./output/csv/{input_file_name}/{now}_dozer_1-3_output.csv', 'w', newline='\n') as csvfile:
+        with open(f'{output_path}/{input_file_name}_1-3_output.csv', 'w', newline='\n') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for route in route_plan:
