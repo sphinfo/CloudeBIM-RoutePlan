@@ -28,18 +28,18 @@ def execute_grader(block_items, execute_type, equip_type, input_path, input_file
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', rearranged_block)
     if execute_type == 'block': return
 
     # 1-2
     allocated_cells = Grader().group(rearranged_block=rearranged_block, converted_block=converted_block, s=s, l=l)
     # 1-2 output
-    Grader.save_output_csv(output_path, file_name(input_path), 'grader', rearranged_block, allocated_cells, converted_block)
+    Grader.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', 'grader', rearranged_block, allocated_cells, converted_block)
     if execute_type == 'alloc': return
 
     # 1-3
     route_plan = GraderRoutePlan(block_items, converted_block, rearranged_block).calc_route_plan(allocated_cells, start_block_name, work_direction)
-    GraderRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
+    GraderRoutePlan.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', route_plan)
 
     if output_file_type == 'all':
         GraderRoutePlan.save_output_png(output_path, file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'grader')
@@ -51,18 +51,18 @@ def execute_paver(block_items, execute_type, equip_type, input_path, input_file_
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', rearranged_block)
     if execute_type == 'block': return
 
     # 1-2
     allocated_cells = Paver().group(rearranged_block=rearranged_block, converted_block=converted_block, s=s, l=l)
     # 1-2 output
-    Paver.save_output_csv(output_path, file_name(input_path), 'paver', rearranged_block, allocated_cells, converted_block)
+    Paver.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', 'paver', rearranged_block, allocated_cells, converted_block)
     if execute_type == 'alloc': return
 
     # 1-3
     route_plan = PaverRoutePlan(block_items, converted_block, rearranged_block).calc_route_plan(allocated_cells, start_block_name, work_direction)
-    PaverRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
+    PaverRoutePlan.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', route_plan)
 
     if output_file_type == 'all':
         PaverRoutePlan.save_output_png(output_path, file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'paver')
@@ -74,18 +74,18 @@ def execute_roller(block_items, execute_type, equip_type, input_path, input_file
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', rearranged_block)
     if execute_type == 'block': return
 
     # 1-2
     allocated_cells = Roller().group(rearranged_block=rearranged_block, converted_block=converted_block, s=s, l=l)
     # 1-2 output
-    Roller.save_output_csv(output_path, file_name(input_path), 'roller', rearranged_block, allocated_cells, converted_block)
+    Roller.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', 'roller', rearranged_block, allocated_cells, converted_block)
     if execute_type == 'alloc': return
 
     # 1-3
     route_plan = RollerRoutePlan(block_items, converted_block, rearranged_block).calc_route_plan(allocated_cells, start_block_name, work_direction, compaction_count)
-    RollerRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
+    RollerRoutePlan.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}', route_plan)
 
     if output_file_type == 'all':
         RollerRoutePlan.save_output_png(output_path, file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'roller', compaction_count)
@@ -98,7 +98,7 @@ def execute_dozer(block_items, execute_type, equip_type, input_path, input_file_
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}_{sub_type}', rearranged_block)
     
     if execute_type == 'block': return
     
@@ -120,7 +120,7 @@ def execute_dozer(block_items, execute_type, equip_type, input_path, input_file_
         rearranged_block=rearranged_block, converted_block=converted_block, e=e, s=s, l=l,
         allowable_error_height=allowable_error_height)
     # 1-2 output
-    Dozer.save_output_csv(output_path, file_name(input_path), f'dozer_{sub_type}', rearranged_block, allocated_cells, converted_block)
+    Dozer.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}_{sub_type}', f'dozer_{sub_type}', rearranged_block, allocated_cells, converted_block)
 
     if execute_type == 'alloc': return
     
@@ -138,7 +138,7 @@ def execute_dozer(block_items, execute_type, equip_type, input_path, input_file_
     # 1-3
     dozer_route_plan = getattr(DozerRoutePlan(block_items, converted_block), f'calc_{sub_type}_route_plan')
     route_plan = dozer_route_plan(rearranged_block, allocated_cells, start_block_name, work_direction, allowable_error_height, s)
-    DozerRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
+    DozerRoutePlan.save_output_csv(output_path, f'{file_name(input_path)}_{equip_type}_{sub_type}', route_plan)
     
     # PNG
     if output_file_type == 'all':
