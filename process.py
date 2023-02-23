@@ -8,7 +8,7 @@ import logging
 from route_planner.arguments import args
 from route_planner import VERSION
 from route_planner.constants import TABLE_NAME
-from route_planner.util import read_mdb, read_csv, file_name
+from route_planner.util import read_mdb, read_csv, read_geojson, file_name
 from route_planner.block import Block
 from route_planner.alloc import Dozer, Roller, Grader, Paver
 from route_planner.plan import Dozer as DozerRoutePlan, Roller as RollerRoutePlan, MovementPlan, Grader as GraderRoutePlan, Paver as PaverRoutePlan
@@ -21,84 +21,84 @@ def execute_movement(block_items, **kwargs):
     movement_plan = MovementPlan(block_items).calc_block(borrow_pit_x, borrow_pit_y, borrow_pit_z, dumping_area_x, dumping_area_y, dumping_area_z, borrow_pit_cut_vol, dumping_area_fill_vol)
     MovementPlan.save_output_csv(file_name(input_path), movement_plan)
 
-def execute_grader(block_items, execute_type, equip_type, input_path, input_file_type, output_file_type, start_block_name,
+def execute_grader(block_items, execute_type, equip_type, input_path, input_file_type, output_path, output_file_type, start_block_name,
                   work_direction, e=None, s=None, l=None):
     logging.info(f'execute grader')
     # 1-1 output
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
     if execute_type == 'block': return
 
     # 1-2
     allocated_cells = Grader().group(rearranged_block=rearranged_block, converted_block=converted_block, s=s, l=l)
     # 1-2 output
-    Grader.save_output_csv(file_name(input_path), 'grader', rearranged_block, allocated_cells, converted_block)
+    Grader.save_output_csv(output_path, file_name(input_path), 'grader', rearranged_block, allocated_cells, converted_block)
     if execute_type == 'alloc': return
 
     # 1-3
     route_plan = GraderRoutePlan(block_items, converted_block, rearranged_block).calc_route_plan(allocated_cells, start_block_name, work_direction)
-    GraderRoutePlan.save_output_csv(file_name(input_path), route_plan)
+    GraderRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
 
     if output_file_type == 'all':
-        GraderRoutePlan.save_output_png(file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'grader')
+        GraderRoutePlan.save_output_png(output_path, file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'grader')
 
-def execute_paver(block_items, execute_type, equip_type, input_path, input_file_type, output_file_type, start_block_name,
+def execute_paver(block_items, execute_type, equip_type, input_path, input_file_type, output_path, output_file_type, start_block_name,
                   work_direction, e=None, s=None, l=None):
     logging.info(f'execute paver')
     # 1-1 output
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
     if execute_type == 'block': return
 
     # 1-2
     allocated_cells = Paver().group(rearranged_block=rearranged_block, converted_block=converted_block, s=s, l=l)
     # 1-2 output
-    Paver.save_output_csv(file_name(input_path), 'paver', rearranged_block, allocated_cells, converted_block)
+    Paver.save_output_csv(output_path, file_name(input_path), 'paver', rearranged_block, allocated_cells, converted_block)
     if execute_type == 'alloc': return
 
     # 1-3
     route_plan = PaverRoutePlan(block_items, converted_block, rearranged_block).calc_route_plan(allocated_cells, start_block_name, work_direction)
-    PaverRoutePlan.save_output_csv(file_name(input_path), route_plan)
+    PaverRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
 
     if output_file_type == 'all':
-        PaverRoutePlan.save_output_png(file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'paver')
+        PaverRoutePlan.save_output_png(output_path, file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'paver')
 
-def execute_roller(block_items, execute_type, equip_type, input_path, input_file_type, output_file_type, start_block_name,
+def execute_roller(block_items, execute_type, equip_type, input_path, input_file_type, output_path, output_file_type, start_block_name,
                   work_direction, e=None, s=None, l=None, compaction_count=None):
     logging.info(f'execute roller')
     # 1-1 output
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
     if execute_type == 'block': return
 
     # 1-2
     allocated_cells = Roller().group(rearranged_block=rearranged_block, converted_block=converted_block, s=s, l=l)
     # 1-2 output
-    Roller.save_output_csv(file_name(input_path), 'roller', rearranged_block, allocated_cells, converted_block)
+    Roller.save_output_csv(output_path, file_name(input_path), 'roller', rearranged_block, allocated_cells, converted_block)
     if execute_type == 'alloc': return
 
     # 1-3
     route_plan = RollerRoutePlan(block_items, converted_block, rearranged_block).calc_route_plan(allocated_cells, start_block_name, work_direction, compaction_count)
-    RollerRoutePlan.save_output_csv(file_name(input_path), route_plan)
+    RollerRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
 
     if output_file_type == 'all':
-        RollerRoutePlan.save_output_png(file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'roller', compaction_count)
+        RollerRoutePlan.save_output_png(output_path, file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, 'roller', compaction_count)
 
 
-def execute_dozer(block_items, execute_type, equip_type, input_path, input_file_type, output_file_type, start_block_name,
+def execute_dozer(block_items, execute_type, equip_type, input_path, input_file_type, output_path, output_file_type, start_block_name,
                   work_direction, sub_type=None, e=None, s=None, l=None, allowable_error_height=None):
     logging.info(f'execute dozer')
     # 1-1 output
     rearranged_block, converted_block, work_direction = Block().rearrangement(
         block_items, start_block_name, work_direction)
     # 1-1 output
-    Block.save_output_csv(file_name(input_path), rearranged_block)
+    Block.save_output_csv(output_path, file_name(input_path), rearranged_block)
     
     if execute_type == 'block': return
     
@@ -120,7 +120,7 @@ def execute_dozer(block_items, execute_type, equip_type, input_path, input_file_
         rearranged_block=rearranged_block, converted_block=converted_block, e=e, s=s, l=l,
         allowable_error_height=allowable_error_height)
     # 1-2 output
-    Dozer.save_output_csv(file_name(input_path), f'dozer_{sub_type}', rearranged_block, allocated_cells, converted_block)
+    Dozer.save_output_csv(output_path, file_name(input_path), f'dozer_{sub_type}', rearranged_block, allocated_cells, converted_block)
 
     if execute_type == 'alloc': return
     
@@ -138,11 +138,11 @@ def execute_dozer(block_items, execute_type, equip_type, input_path, input_file_
     # 1-3
     dozer_route_plan = getattr(DozerRoutePlan(block_items, converted_block), f'calc_{sub_type}_route_plan')
     route_plan = dozer_route_plan(rearranged_block, allocated_cells, start_block_name, work_direction, allowable_error_height, s)
-    DozerRoutePlan.save_output_csv(file_name(input_path), route_plan)
+    DozerRoutePlan.save_output_csv(output_path, file_name(input_path), route_plan)
     
     # PNG
     if output_file_type == 'all':
-        DozerRoutePlan.save_output_png(file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, f'dozer_{sub_type}')
+        DozerRoutePlan.save_output_png(output_path, file_name(input_path), route_plan, rearranged_block, converted_block, allocated_cells, f'dozer_{sub_type}')
 
 
 FUNCTION_MAP = {
@@ -159,7 +159,7 @@ if __name__ == "__main__":
     logging.info(f'arguments: {args}')
     logging.info(f'cmd: python process.py --{" --".join([k + " " + str(v) for k, v in args.items()])}')
     start = time.time()
-    block_items = read_csv(args.get('input_path')) if args.get('input_file_type') == 'csv' else read_mdb(args.get('input_path'), TABLE_NAME)
+    block_items = read_csv(args.get('input_path')) if args.get('input_file_type') == 'csv' else read_mdb(args.get('input_path'), TABLE_NAME) if args.get('input_file_type') == 'mdb' else read_geojson(args.get('input_path'))
     logging.info(f'Read {args.get("input_path")}.. duration: {time.time() - start} sec')
     FUNCTION_MAP.get(args.get('equip_type'))(block_items, **args)
     logging.info(f'total duration: {time.time() - start} sec')
