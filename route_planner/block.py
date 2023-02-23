@@ -29,12 +29,12 @@ class Block(object):
     # output csv
     @staticmethod
     @log_decorator('블록 재배열 알고리즘 결과 저장')
-    def save_output_csv(input_file_name, rearranged_block):
+    def save_output_csv(output_path, input_file_name, rearranged_block):
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        makedirs(f'./output/csv/{input_file_name}', exist_ok=True)
+        makedirs(output_path, exist_ok=True)
         _rearranged_block = rearranged_block.copy()
         _rearranged_block.reverse()
-        with open(f'./output/csv/{input_file_name}/{now}_1-1_output.csv', 'w', newline='\n') as csvfile:
+        with open(f'{output_path}/{input_file_name}_1-1_output.csv', 'w', newline='\n') as csvfile:
             cw = csv.writer(csvfile)
             for i_block in _rearranged_block:
                 cw.writerow(i_block)
