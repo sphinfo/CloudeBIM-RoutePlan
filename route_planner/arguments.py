@@ -6,7 +6,8 @@ parser = argparse.ArgumentParser(description='Route Planner Module', allow_abbre
 
 parser.add_argument('--execute_type', type=str,   required=True, choices=['all', 'block', 'alloc', 'route', 'movement_plan'], help='실행(all,block,alloc,route,movement_plan)')
 parser.add_argument('--input_path', type=str, required=True, help='Input File 경로')
-parser.add_argument('--input_file_type', type=str, default='csv', required=True, choices=['csv', 'mdb'], help='Input File 형식(csv, mdb)')
+parser.add_argument('--input_file_type', type=str, default='csv', required=True, choices=['csv', 'mdb', 'json'], help='Input File 형식(csv, mdb, geojson)')
+parser.add_argument('--output_path', type=str, required=True, help='Output File 경로')
 parser.add_argument('--output_file_type', type=str, default='csv', required=False, choices=['csv', 'all'], help='Output File 형식(csv, all)')
 
 parser.add_argument('--sub_type', type=str,   required=False, choices=['fill', 'cut'], help='dozer fill or cut')
