@@ -26,3 +26,29 @@ OUTPUT_PATH     | Output path           | ./output
 DPI             | PNG DPI               |  300
 FONT            | PNG default font      | {'family': 'serif', 'color':  'black', 'weight': 'normal', 'size': 8}
 RED_FONT        | PNG virtual cell font | {'family': 'serif', 'color':  'red', 'weight': 'normal', 'size': 8}
+
+
+
+도저 절토
+./dozer_cut.sh all ./polygon2.json BL_14 1 10 3 15 0.05 all ./output
+
+도저 성토
+./dozer_fill.sh all ./polygon2.json BL_14 1 10 3 15 0.05 all ./output
+
+페이버
+./paver.sh all ./polygon2.json BL_14 1 10 3 15 all ./output
+
+그레이더
+./grader.sh all ./polygon2.json BL_14 1 10 3 15 all ./output
+
+롤러
+./roller.sh all ./polygon2.json BL_14 1 10 3 15 1 all ./output
+
+polygon2.json
+(계획경로) 프로그램정의서v0.0.7.hwp
+
+output경로에
+json파일명_장비_1-1_output.csv -> 블럭재배열
+json파일명_장비_1-2_output.csv -> 할당셀지정
+json파일명_장비_1-3_output.csv -> 계획경로 산출
+json파일명_장비.png -> 계획경로 이미지
