@@ -28,7 +28,7 @@ FONT            | PNG default font      | {'family': 'serif', 'color':  'black',
 RED_FONT        | PNG virtual cell font | {'family': 'serif', 'color':  'red', 'weight': 'normal', 'size': 8}
 
 
-
+# Shell
 도저 절토
 ./dozer_cut.sh all ./polygon2.json BL_14 1 10 3 15 0.05 all ./output
 
