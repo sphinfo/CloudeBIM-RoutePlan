@@ -121,7 +121,7 @@ def second_move_points_in_parallel(df1, df2, second_gap):
 # 장비 시작지점 설정 함수
 # True : 1 -> 2, False : 2 -> 1
 def set_starting_point(num1):
-    if num1==1 :
+    if num1=="1" :
         return True
     else :
         return False
