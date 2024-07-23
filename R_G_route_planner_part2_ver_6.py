@@ -3,10 +3,9 @@ import numpy as np
 import math
 import json
 from R_G_route_arguments import args
+from shapely.geometry import Point, MultiPoint,LineString
 import geopandas as gpd
 import geojson
-
-from shapely.geometry import Polygon
 
 # csv 파일 불러오기
 def read_csv_files(file):
@@ -37,7 +36,6 @@ def first_repeated_rate(model_width, attachment_width, equipment_width, safety_l
     equipment_width = equipment_width # 장비 폭
     safety_line = safety_line # 안전 거리
     x_min = x_min
-    
     # 첫 평행이동 거리는 어테치먼트 폭과 장비 폭중 더 큰것
     first_gap = max(attachment_width, equipment_width)
 
@@ -50,6 +48,7 @@ def first_repeated_rate(model_width, attachment_width, equipment_width, safety_l
     y_max = 100
 
     # 중복도 구하는 식
+    
     for y in range(y_min, y_max):
         x = 1 - (model_width - first_gap - 2 * safety_line) / (attachment_width * (y - 1))
         if x > x_min and x < x_max:
@@ -147,52 +146,6 @@ def check_obstacle(obstacles, line_num, df1_length):
                 return False  # 장애물의 인덱스가 df1의 개수보다 크면 장애물이 없는 것으로 간주
     return False  # 장애물이 없는 경우
 
-# 라인 변경 함수
-def line_change(line1, line2):
-    num_points = min(len(line1), len(line2))
-    points = {'x': [], 'y': []}
-
-    # Add the first point from line1
-    points['x'].append(line1['x'][0])
-    points['y'].append(line1['y'][0])
-
-    # Calculate the intermediate points
-    for i in range(1, num_points - 1):
-        x = line1['x'][i] + ((line2['x'][i] - line1['x'][i]) / (num_points - 1)) * i
-        y = line1['y'][i] + ((line2['y'][i] - line1['y'][i]) / (num_points - 1)) * i
-        points['x'].append(x)
-        points['y'].append(y)
-
-    # Add the last point from line2
-    points['x'].append(line2['x'][num_points - 1])
-    points['y'].append(line2['y'][num_points - 1])
-
-    return pd.DataFrame(points)
-
-
-# csv 통합
-def combine_and_save_waypoints(forward_waypoints, backward_waypoints, output_file):
-    combined = []
-    for cycle in range(len(forward_waypoints)):
-        for line in range(len(forward_waypoints[cycle])):
-            if line in forward_waypoints[cycle]:
-                combined.append(forward_waypoints[cycle][line])
-                combined.append(pd.DataFrame({'x': [np.nan], 'y': [np.nan], 'direction': [np.nan]}))  # Add separator
-            if line in backward_waypoints[cycle]:
-                combined.append(backward_waypoints[cycle][line])
-                combined.append(pd.DataFrame({'x': [np.nan], 'y': [np.nan], 'direction': [np.nan]}))  # Add separator
-    combined_waypoints = pd.concat(combined, ignore_index=True)    
-    combined_waypoints['z1'] = 0
-    combined_waypoints['z2'] = 0
-    combined_waypoints.to_csv(output_file, index=False)
-    # # csv 따로 생성하는 부분
-    # for cycle in forward_waypoints.keys():
-    #     for i, (forward_line, backward_line) in enumerate(zip(forward_waypoints[cycle].values(), backward_waypoints[cycle].values())):
-    #         forward_output_file = f"forward_waypoint_{cycle}_{i+1}.csv"
-    #         backward_output_file = f"backward_waypoint_{cycle}_{i+1}.csv"
-    #         forward_line.to_csv(forward_output_file, index=False)
-    #         backward_line.to_csv(backward_output_file, index=False)
-
 def main():
     # input 값 입력하기
     equipment_width = args['equipment_width']
@@ -206,47 +159,11 @@ def main():
     output_file = args['output_file']
     df1, df2 = read_csv_files(input_file)
     
-    cycle_num = args['cycle_num'] # 싸이클 횟수
-    line_change_way = args['line_change_way'] # 1:후진 후 변경, 2:후진 중 변경, 3:3점회전법
-
-    # working_type = "rolling" # rolling : 다짐, grading : 평탄화, fill : 성토 등등
-    
-    equipment = 'roller' # roller & grader
-    
-    # 필요한 최소 후진거리
-    required_distance_for_backward = 0
-    if line_change_way == 1 :
-        required_distance_for_backward = turning_radius * 1.5
-    elif line_change_way == 2 :
-        required_distance_for_backward = 0
-    else : 
-        required_distance_for_backward = turning_radius
-
-    node_distance = 2 # 노드 사이 거리
-    
-    # 후진에 필요한 노드 수
-    required_points = math.ceil(required_distance_for_backward / node_distance)
-
-    # 장애물 위치 설정 (원한다면 추가도 가능)
-    obstacles = [
-    [2, 20],
-    [3, 10]
-    ]
-
-    # 시작 위치, 방향 설정
-    start_option = set_starting_point(starting_position)
-    direction_option = set_starting_direction(starting_direction)
-
-    # 시작 위치가 B->A 일 경우 df1과 df2 역순으로 정렬
-    if direction_option == False :
-        df1 = df1.iloc[::-1].reset_index(drop=True)
-        df2 = df2.iloc[::-1].reset_index(drop=True)
-
     distances = calculate_distances(df1, df2)
     
     max_distance = max(distances) # 도로 폭이 최대인 곳
     min_distance = min(distances) # 도로 폭이 최소인 곳
-
+ 
     fg = max(attachment_width, equipment_width)
     # 최대 안전라인 거리
     max_safety_line = (min_distance - fg) / 2
@@ -254,123 +171,28 @@ def main():
     # 설정한 안전라인이 최대값을 넘어가면 최대값으로 설정
     if safety_line > max_safety_line:
         safety_line = max_safety_line
-
+        
     # 라인 수, 중복도, 유효폭, 첫 평행이동 거리 구하기 - 도로 폭은 최대거리 사용
     exact_y, x, effective_width, first_gap = first_repeated_rate(max_distance, attachment_width, equipment_width, safety_line, x_min)
     
     # 두번째 offset 부터의 offset 거리
     second_gap = [second_repeated_rate(exact_y, distance, attachment_width, equipment_width, safety_line) for distance in distances]
 
-    forward_lines = {}
-    backward_lines = {}
-
-    # 각 라인에 대한 평행 이동
+    forward_lines = []
+    # 각 라인에 대한 평행 이동 및 CSV파일 저장
     for i in range(exact_y):
         if i == 0:  # 첫번째 라인
             forward_line = first_move_points_in_parallel(df1, df2, first_gap/2, safety_line)
         else:  # 이후의 라인들
             forward_line = second_move_points_in_parallel(forward_line, df2, second_gap)
+        forward_lines.append(forward_line)
 
-        forward_lines[i] = forward_line
-
-        backward_line = forward_line[::-1].reset_index(drop=True)  # 후진 경로 생성
-        backward_lines[i] = backward_line
-
-    forward_waypoints = {}  # 전진경로 초기화
-    backward_waypoints = {}  # 후진경로 초기화
-
-    # 후진 라인 저장
-    for i in range(cycle_num):
-        current_cycle = i  # 현재 싸이클 횟수
-        forward_waypoints[current_cycle] = {}  # 전진경로 초기화
-        backward_waypoints[current_cycle] = {} # 후진경로 초기화
-
-        # 홀수번째 싸이클
-        if current_cycle % 2 == 0:
-            # 라인 번호 할당
-            for j in range(exact_y):
-                if start_option == True: # 라인 방향 1->2
-                    forward_waypoints[current_cycle][j] = forward_lines[j]
-                    backward_waypoints[current_cycle][j] = backward_lines[j]
-                else : # 라인 방향 2->1
-                    forward_waypoints[current_cycle][j] = forward_lines[exact_y - j - 1]
-                    backward_waypoints[current_cycle][j] = backward_lines[exact_y - j - 1]
-        
-        else : # 짝수번째 싸이클
-            for j in range(exact_y):
-                if start_option == True: # 라인 방향 1->2
-                    forward_waypoints[current_cycle][j] = forward_lines[exact_y - j - 1]
-                    backward_waypoints[current_cycle][j] = backward_lines[exact_y - j - 1]
-                else : # 라인 방향 2->1
-                    forward_waypoints[current_cycle][j] = forward_lines[j]
-                    backward_waypoints[current_cycle][j] = backward_lines[j]
-
-    updated_forward_waypoints = {} 
+    df_lines = pd.concat(forward_lines)
+    gdf_lines = gpd.GeoDataFrame(df_lines, geometry=gpd.points_from_xy(df_lines.x, df_lines.y))
+    multipoints = MultiPoint(np.asarray(gdf_lines['geometry']))
+    #df_lines = pd.DataFrame({'exact_y':exact_y, 'x':x, 'effective_width':effective_width, 'geometry': multipoints})
+    gdf_lines = gpd.GeoDataFrame({'exact_y':[exact_y], 'x':[x], 'effective_width':[effective_width], 'geometry': [multipoints]})
+    gdf_lines.to_file(output_file,driver='GeoJSON')
     
-    # 후진 후 변경
-    if line_change_way == 1:
-        tmp = {}
-        
-        for i in range(cycle_num):
-            current_cycle = i
-
-            tmp[current_cycle] = [None] * exact_y
-            for j in range(1, exact_y):
-                # Access the DataFrame for the current and previous lines
-                
-                previous_line_df = forward_waypoints[current_cycle][j - 1]
-                current_line_df = forward_waypoints[current_cycle][j]
-                
-
-                # Slice the DataFrames
-                first_part_forward_line = current_line_df.iloc[:required_points]
-                second_part_forward_line = current_line_df.iloc[required_points:]
-                first_part_previous_forward_line = previous_line_df.iloc[:required_points]
-
-                # Apply the line_change function between the previous and current lines
-                new_forward_line = line_change(first_part_previous_forward_line, first_part_forward_line)
-                
-                updated_forward_waypoints = pd.concat([new_forward_line, second_part_forward_line], ignore_index=True)
-                
-                tmp[current_cycle][j] = updated_forward_waypoints
-                # forward_waypoints[current_cycle][j] = updated_forward_waypoints
-
-            for j in range(1, exact_y) :
-                forward_waypoints[current_cycle][j] = tmp[current_cycle][j]
-
-    # 후진 중 변경
-    elif line_change_way == 2 :
-        for i in range(cycle_num):
-            current_cycle = i
-
-            for j in range(exact_y):
-                if j < exact_y - 1:
-                    current_line_waypoints = backward_waypoints[current_cycle][j]
-                    next_line_waypoints = backward_waypoints[current_cycle][j+1]
-
-                    new_backward_line = line_change(current_line_waypoints, next_line_waypoints)
-                    backward_waypoints[current_cycle][j] = new_backward_line
-    
-
-
-    # 마지막 사이클의 마지막 후진 경로 삭제
-    last_cycle = cycle_num - 1
-    if last_cycle in backward_waypoints and len(backward_waypoints[last_cycle]) > 0:
-        del backward_waypoints[last_cycle][len(backward_waypoints[last_cycle]) - 1]
-
-    # 전진 경로에 1 추가
-    for cycle, waypoints in forward_waypoints.items():
-        for line_num, df in waypoints.items():
-            df['direction'] = 1
-
-    # 후진 경로에 -1 추가
-    for cycle, waypoints in backward_waypoints.items():
-        for line_num, df in waypoints.items():
-            df['direction'] = -1
-
-
-    # csv 통합
-    combine_and_save_waypoints(forward_waypoints, backward_waypoints, output_file)
-
 if __name__ == "__main__":
     main()
