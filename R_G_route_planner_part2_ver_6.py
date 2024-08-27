@@ -258,19 +258,22 @@ def main():
     
     requierd_dist_for_line_change_num = get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turning_radius) # 라인변경에 필요한 최소 노드 수
     min_start_line = requierd_dist_for_line_change_num + space # start_line 최소값
+    max_start_line = len(df0)-space-requierd_dist_for_line_change_num
     
     if line_change_way == 3:
         max_end_line = len(df1)-requierd_dist_for_line_change_num # end_line 최대값    
     else :
         max_end_line = len(df1)
 
-    # start_line 범위 초과 시 범위 내로 수정
+     # start_line 범위 초과 시 범위 내로 수정
     if int(start_line) > int(end_line) :
-        start_line = int(end_line) - 1
+        start_line, end_line = end_line, start_line
     
     if int(start_line) < int(min_start_line) :
-        start_line = int(min_start_line)  
-   
+        start_line = int(min_start_line)
+    
+    if int(start_line) > int(max_start_line) :
+        start_line = int(max_start_line)
     
     # end_line 범위 초과 시 범위 내로 수정
     if int(end_line)>int(max_end_line) : 
