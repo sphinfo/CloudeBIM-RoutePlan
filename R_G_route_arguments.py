@@ -6,7 +6,7 @@ parser.add_argument('--input_file', type=str, required=True, help='입력 파일
 parser.add_argument('--output_file', type=str, required=True, help='출력 파일 경로')
 parser.add_argument('--equipment_width', type=float,   required=True, help='장비 폭')
 parser.add_argument('--attachment_width', type=float,   required=True, help='어테치먼트 폭')
-parser.add_argument('--equipment_length', type=float,   required=True, help='장비 길이')
+parser.add_argument('--equipment_length', type=float,   required=False, help='장비 길이')
 parser.add_argument('--safety_line', type=float,   required=True, help='안전거리')
 parser.add_argument('--x_min', type=float,   required=True, help='중복도 최소범위')
 parser.add_argument('--turning_radius', type=float,   required=True, help='회전반경')
