@@ -12,4 +12,7 @@ starting_position=${8}
 starting_direction=${9}
 cycle_num=${10}
 line_change_way=${11}
-python /ebim/routev2_test/R_G_route_planner_part1_ver_6.py --input_file $input_file --output_file $output_file --equipment_width $equipment_width --attachment_width $attachment_width --safety_line $safety_line --x_min $x_min --turning_radius $turning_radius --starting_position $starting_position --starting_direction $starting_direction --cycle_num $cycle_num --line_change_way $line_change_way
+equipment_length=${12}
+start_line=${13}
+end_line=${14}
+python /data2/ebim/execute/routev2/R_G_route_planner_part2_ver_6.py --input_file $input_file --output_file $output_file --equipment_width $equipment_width --attachment_width $attachment_width --safety_line $safety_line --x_min $x_min --turning_radius $turning_radius --starting_position $starting_position --starting_direction $starting_direction --cycle_num $cycle_num --line_change_way $line_change_way --equipment_length $equipment_length --start_line $start_line --end_line $end_line
