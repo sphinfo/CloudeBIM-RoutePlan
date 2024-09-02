@@ -169,12 +169,12 @@ def get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turnin
 # 작업구역 선택
 def set_work_area(df1,df2,start_line, end_line):
     df1_none_work_area_1 = df1.iloc[:start_line]
-    df1_work_area = df1.iloc[start_line:end_line]
-    df1_none_work_area_2 = df1.iloc[end_line:]
+    df1_work_area = df1.iloc[start_line:end_line+1]
+    df1_none_work_area_2 = df1.iloc[end_line+1:]
     
     df2_none_work_area_1 = df2.iloc[:start_line]
-    df2_work_area = df2.iloc[start_line:end_line]
-    df2_none_work_area_2 = df2.iloc[end_line:]
+    df2_work_area = df2.iloc[start_line:end_line+1]
+    df2_none_work_area_2 = df2.iloc[end_line+1:]
 
     return df1_none_work_area_1, df1_work_area, df1_none_work_area_2, df2_none_work_area_1, df2_work_area, df2_none_work_area_2
 
