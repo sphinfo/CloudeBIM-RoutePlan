@@ -258,30 +258,38 @@ def main():
     
     requierd_dist_for_line_change_num = get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turning_radius) # 라인변경에 필요한 최소 노드 수
     min_start_line = requierd_dist_for_line_change_num + space # start_line 최소값
-    max_start_line = len(df0)-space-requierd_dist_for_line_change_num
+    
+    max_start_line = len(df1)-1
+    
+    if line_change_way == 2 : # 후진 중 변경 최대 start_line 값
+        max_start_line = len(df0)-space-requierd_dist_for_line_change_num
     
     if line_change_way == 3:
-        max_end_line = len(df1)-requierd_dist_for_line_change_num # end_line 최대값    
+        max_end_line = len(df1)-requierd_dist_for_line_change_num # end_line 최대값
+    
     else :
-        max_end_line = len(df1)
+        max_end_line = len(df1)-1
+   
 
-     # start_line 범위 초과 시 범위 내로 수정
-    if int(start_line) > int(end_line) :
-        start_line, end_line = end_line, start_line
+    # starting_direction == B 일 경우
+    if starting_direction == "B" :
+        start_line = len(df1)-start_line-1 # start_line 인덱스 전환
+        end_line = len(df1)-end_line-1 # end_line 인덱스 전환
+
+
+    if int(start_line) > int(end_line) : # start_line보다 end_line이 후방에 있을 경우
+        start_line, end_line = end_line, start_line # start_line과 end_line을 서로 바꿈
+
+    if int(start_line) < int(min_start_line) :  # start_line이 min_start_line 보다 전방에 있을 경우
+        start_line = int(min_start_line) # start_line 값을 min_start_line으로 설정
     
-    if int(start_line) < int(min_start_line) :
-        start_line = int(min_start_line)
-    
-    if int(start_line) > int(max_start_line) :
-        start_line = int(max_start_line)
-    
+    if int(start_line) > int(max_start_line) : # start_line이 max_start_line보다 클 경우
+        start_line = int(max_start_line) # start_line을 max_start_line으로 설정
+
     # end_line 범위 초과 시 범위 내로 수정
-    if int(end_line)>int(max_end_line) : 
-        end_line = int(max_end_line)
+    if int(end_line) > int(max_end_line) : # end_line이 max_end_line보다 클 경우
+        end_line = int(max_end_line) # end_line을 max_end_line으로 설정
 
-    if int(end_line) < int(start_line) :
-        end_line = int(start_line) + 1
-    
     # df_none_work_area_1 : start_line 전의 구역
     # df_work_area : start_line과 end_line 사이의 구역
     # df_none_work_area_2 : end_line 이후의 구역
@@ -291,7 +299,7 @@ def main():
     df2_none_work_area_1 = df2_none_work_area_1.iloc[space:]
 
     df1_work_area = pd.concat([df1_none_work_area_1, df1_work_area])
-    df2_work_area = pd.concat([df2_none_work_area_1, df2_work_area]) 
+    df2_work_area = pd.concat([df2_none_work_area_1, df2_work_area])
 
     # working_type = "rolling" # rolling : 다짐, grading : 평탄화, fill : 성토 등등
     equipment = 'roller' # roller & grader    
@@ -349,7 +357,7 @@ def main():
         if current_cycle % 2 == 0:
             # 라인 번호 할당
             for j in range(exact_y):
-                if starting_position == 1: # 라인 방향 1->2
+                if starting_position == "1": # 라인 방향 1->2
                     forward_waypoints[current_cycle][j] = forward_lines[j]
                     backward_waypoints[current_cycle][j] = backward_lines[j]
                 else : # 라인 방향 2->1
@@ -358,7 +366,7 @@ def main():
         
         else : # 짝수번째 싸이클
             for j in range(exact_y):
-                if starting_position == 1: # 라인 방향 1->2
+                if starting_position == "1": # 라인 방향 1->2
                     forward_waypoints[current_cycle][j] = forward_lines[exact_y - j - 1]
                     backward_waypoints[current_cycle][j] = backward_lines[exact_y - j - 1]
                 else : # 라인 방향 2->1
