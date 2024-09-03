@@ -26,7 +26,7 @@ def direction(df1, df2,start_point, start_direction):
     if start_direction == 'B' :
         df1 = df1.iloc[::-1].reset_index(drop=True)
         df2 = df2.iloc[::-1].reset_index(drop=True)
-    if start_point == 2 :
+    if start_point == '2' :
         df1, df2 = df2, df1
     return df1, df2
 
