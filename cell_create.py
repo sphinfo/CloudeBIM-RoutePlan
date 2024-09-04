@@ -179,7 +179,7 @@ def create_grid_cells(arrangement):
 
 # 중앙선 재생성
 def calculate_midpoint(point1, point2):
-    return ((point1[0] + point2[0]) / 2, (point1[1] + point2[1]) / 2)
+    return ((point1[0] + point2[0]) / 2.0, (point1[1] + point2[1]) / 2.0)
 
 # 셀 시각화 코드
 def visualize_grid_cells(grid_cells,df0, df1, df2):
@@ -325,9 +325,13 @@ def calculate_midpoint(point1, point2):
     return midpoint_x, midpoint_y
 
 # csv 파일 만들기
-def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', boundary_polygon=None, inside_polygons=None):
+def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', boundary_polygon=None, inside_polygons=None, intersecting_cells=None):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     rows = []
+
+    # intersecting_cells가 제공되지 않은 경우 빈 리스트로 초기화
+    if intersecting_cells is None:
+        intersecting_cells = []
 
     for idx, (bl_name, grid_cells) in enumerate(grid_cells_dict.items(), start=1):
         for grid_cell in grid_cells:
@@ -339,29 +343,32 @@ def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', bounda
                 continue
 
             # 마지막 좌표 제거
-            coords = [(round(coord[0], 1), round(coord[1], 1)) for coord in vertices[:-1]]
+            coords = [(round(coord[0], 4), round(coord[1], 4)) for coord in vertices[:-1]]
 
             # 기본 YN 값을 'Y'로 설정
             yn_value = 'Y'
 
-            # Boundary_polygon과의 교차 여부 및 내부 포함 여부 확인
-            polygon = Polygon(coords)
-            if boundary_polygon:
-                if polygon.intersects(boundary_polygon):
-                    # 모든 점이 boundary_polygon 내부에 있거나 경계 위에 있는지 확인
-                    if not all(boundary_polygon.contains(Point(coord)) or boundary_polygon.touches(Point(coord)) for coord in coords):
+            # intersecting_cells에 있는 셀이라면 YN을 'N'으로 설정
+            if bl_name in intersecting_cells:
+                yn_value = 'N'
+            else:
+                # Boundary_polygon과의 교차 여부 및 내부 포함 여부 확인
+                polygon = Polygon(coords)
+                if boundary_polygon:
+                    if polygon.intersects(boundary_polygon):
+                        # 모든 점이 boundary_polygon 내부에 있거나 경계 위에 있는지 확인
+                        if not all(boundary_polygon.contains(Point(coord)) or boundary_polygon.touches(Point(coord)) for coord in coords):
+                            yn_value = 'N'
+                    else:
                         yn_value = 'N'
-                else:
-                    # 셀이 경계와 전혀 교차하지 않으면 N
-                    yn_value = 'N'
 
             # 중점 좌표 계산 (YN이 Y일 때만 계산)
             if yn_value == 'Y':
                 xb, yb = calculate_midpoint(coords[0], coords[1])
                 xt, yt = calculate_midpoint(coords[-1], coords[-2])
-                # 소수점 이하 첫째 자리까지 반올림
-                xb, yb = f"{xb:.2f}", f"{yb:.2f}"
-                xt, yt = f"{xt:.2f}", f"{yt:.2f}"
+                # 소수점 이하 넷째 자리까지 반올림
+                xb, yb = f"{xb:.4f}", f"{yb:.4f}"
+                xt, yt = f"{xt:.4f}", f"{yt:.4f}"
             else:
                 xb, yb, xt, yt = "", "", "", ""
 
@@ -377,12 +384,12 @@ def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', bounda
                 row = [
                     idx,
                     bl_name,
-                    f"{grid_cell.area:.1f}",
-                    f"{coords[0][0]:.1f}", f"{coords[0][1]:.1f}", "0.0",  # X1, Y1, Z1coord
-                    f"{coords[1][0]:.1f}", f"{coords[1][1]:.1f}", "0.0",  # X2, Y2, Z2coord
-                    f"{coords[2][0]:.1f}", f"{coords[2][1]:.1f}", "0.0",  # X3, Y3, Z3coord
-                    f"{coords[3][0]:.1f}" if num_vertices > 3 and len(coords) > 3 else "", f"{coords[3][1]:.1f}" if num_vertices > 3 and len(coords) > 3 else "", "0.0" if num_vertices > 3 and len(coords) > 3 else "",  # X4, Y4, Z4coord
-                    f"{coords[4][0]:.1f}" if num_vertices > 4 and len(coords) > 4 else "", f"{coords[4][1]:.1f}" if num_vertices > 4 and len(coords) > 4 else "", "0.0" if num_vertices > 4 and len(coords) > 4 else "",  # X5, Y5, Z5coord
+                    f"{grid_cell.area:.4f}",
+                    f"{coords[0][0]:.4f}", f"{coords[0][1]:.4f}", "0.0",  # X1, Y1, Z1coord
+                    f"{coords[1][0]:.4f}", f"{coords[1][1]:.4f}", "0.0",  # X2, Y2, Z2coord
+                    f"{coords[2][0]:.4f}", f"{coords[2][1]:.4f}", "0.0",  # X3, Y3, Z3coord
+                    f"{coords[3][0]:.4f}" if num_vertices > 3 and len(coords) > 3 else "", f"{coords[3][1]:.4f}" if num_vertices > 3 and len(coords) > 3 else "", "0.0" if num_vertices > 3 and len(coords) > 3 else "",  # X4, Y4, Z4coord
+                    f"{coords[4][0]:.4f}" if num_vertices > 4 and len(coords) > 4 else "", f"{coords[4][1]:.4f}" if num_vertices > 4 and len(coords) > 4 else "", "0.0" if num_vertices > 4 and len(coords) > 4 else "",  # X5, Y5, Z5coord
                     xt, yt, "0.0" if yn_value == 'Y' else "",  # XTcoord, YTcoord, ZTcoord
                     xb, yb, "0.0" if yn_value == 'Y' else "",  # XBcoord, YBcoord, ZBcoord
                     "", "", yn_value, ""  # YN, 기타 빈칸 처리
@@ -416,8 +423,8 @@ def main():
     start_point = args['starting_position']
     start_direction = args['starting_direction']
     repeated_rate = args['repeated_rate']
-    repeated_rate = repeated_rate * 0.01    
-    cell_size = max(args['equipment_width'], args['attachment_width'])*(1-repeated_rate)
+    repeated_rate = repeated_rate * 0.01
+    cell_size = args['attachment_width']*(1-repeated_rate)
     df1, df2 = direction(df1,df2,start_point, start_direction)
     # print("origin df = ", len(df0))
 
@@ -474,7 +481,7 @@ def main():
     grid_cells_dict.update(inside_polygons_2)
 
     # 덮어쓴 grid_cells_dict를 사용하여 CSV 파일로 저장
-    write_cells_to_csv(grid_cells_dict, args['output_file'],boundary_polygon, inside_polygons)
+    write_cells_to_csv(grid_cells_dict, args['output_file'],boundary_polygon, inside_polygons, intersecting_cells)
  
     # # print(grid_cells)
     # visualize_grid_cells(grid_cells,df0,df1,df2)
