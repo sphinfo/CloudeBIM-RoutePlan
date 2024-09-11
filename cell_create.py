@@ -40,6 +40,21 @@ def create_new_center_line(df1, df2):
         new_df0.loc[len(new_df0)] = {'x': x0, 'y': y0}  # DataFrame에 행 추가
     return new_df0
 
+# 외단라인 df csv 업데이트 하기
+def df_update_csv(df0, df1, df2, filename='output/new_df.csv'):
+    """Update CSV file with new DataFrames."""
+    
+    # DataFrames를 하나로 병합
+    merged_df = pd.DataFrame({
+        'x0': df0['x'], 'y0': df0['y'], 'z0' : 0,
+        'x1': df1['x'], 'y1': df1['y'], 'z1' : 0,
+        'x2': df2['x'], 'y2': df2['y'], 'z2' : 0
+    })
+    
+    # CSV 파일로 저장
+    merged_df.to_csv(filename, index=False)
+
+
 # 두 점 거리 구하는 함수
 def calculate_distances(df1, df2):
     """Calculate distances between points in df1 and df2."""
@@ -324,7 +339,22 @@ def calculate_midpoint(point1, point2):
     midpoint_y = (y1 + y2) / 2.0
     return midpoint_x, midpoint_y
 
-# csv 파일 만들기
+# 중복점 삭제
+def remove_duplicate_points(vertices, tolerance=1e-4):
+    """Remove duplicate points from a list of vertices with a given tolerance."""
+    unique_vertices = []
+    for vertex in vertices:
+        if not unique_vertices:
+            unique_vertices.append(vertex)
+        else:
+            last_vertex = unique_vertices[-1]
+            if np.linalg.norm(np.array(vertex) - np.array(last_vertex)) > tolerance:
+                unique_vertices.append(vertex)
+    return unique_vertices
+
+    
+
+# gird_cell csv 파일 만들기
 def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', boundary_polygon=None, inside_polygons=None, intersecting_cells=None):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     rows = []
@@ -336,14 +366,14 @@ def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', bounda
     for idx, (bl_name, grid_cells) in enumerate(grid_cells_dict.items(), start=1):
         for grid_cell in grid_cells:
             vertices = list(grid_cell.exterior.coords)
+            vertices = remove_duplicate_points(vertices)
             num_vertices = len(vertices)
 
             # 삼각형, 사각형, 오각형만 처리 (vertices가 3보다 작으면 무시)
             if num_vertices < 3:
                 continue
 
-            # 마지막 좌표 제거
-            coords = [(round(coord[0], 4), round(coord[1], 4)) for coord in vertices[:-1]]
+            coords = [(round(coord[0], 4), round(coord[1], 4)) for coord in vertices]
 
             # 기본 YN 값을 'Y'로 설정
             yn_value = 'Y'
@@ -413,6 +443,7 @@ def inputParam():
     parser.add_argument('--starting_position', type=str,   required=True, choices=['1', '2'], help='작업 진행 방향')
     parser.add_argument('--starting_direction', type=str,   required=True, choices=['A', 'B'], help='작업 시작 방향')
     parser.add_argument('--repeated_rate', type=float, required=False, default=5, help="중복도")
+    parser.add_argument('--output_newline_file', type=str, required=True, help="출력 외곽선 라인(sorted)")
     args = {k: v for k, v in parser.parse_args().__dict__.items() if v is not None}
     return args
 
@@ -433,6 +464,7 @@ def main():
 
     df0 = create_new_center_line(df1, df2)
     # print("new df = ", len(df0))
+    df_update_csv(df0, df1, df2, args['output_newline_file'])  # 새 CSV 파일로 저장
 
     arrangement = vertical_line_create(df0, df1, df2, cell_size, max_distance)
 
