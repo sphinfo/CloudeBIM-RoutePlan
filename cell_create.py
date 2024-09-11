@@ -341,17 +341,21 @@ def calculate_midpoint(point1, point2):
 
 # 중복점 삭제
 def remove_duplicate_points(vertices, tolerance=1e-4):
-    """Remove duplicate points from a list of vertices with a given tolerance."""
+    """Remove later instances of duplicate points by comparing each point with every other point."""
     unique_vertices = []
-    for vertex in vertices:
-        if not unique_vertices:
-            unique_vertices.append(vertex)
-        else:
-            last_vertex = unique_vertices[-1]
-            if np.linalg.norm(np.array(vertex) - np.array(last_vertex)) > tolerance:
-                unique_vertices.append(vertex)
+    seen = set()
+    
+    for i in range(len(vertices)):
+        is_duplicate = False
+        for j in range(len(unique_vertices)):
+            if np.linalg.norm(np.array(vertices[i]) - np.array(unique_vertices[j])) < tolerance:
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            unique_vertices.append(vertices[i])
+    
     return unique_vertices
-
     
 
 # gird_cell csv 파일 만들기
@@ -373,7 +377,7 @@ def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', bounda
             if num_vertices < 3:
                 continue
 
-            coords = [(round(coord[0], 4), round(coord[1], 4)) for coord in vertices]
+            coords = [(coord[0], coord[1]) for coord in vertices]
 
             # 기본 YN 값을 'Y'로 설정
             yn_value = 'Y'
@@ -396,9 +400,9 @@ def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', bounda
             if yn_value == 'Y':
                 xb, yb = calculate_midpoint(coords[0], coords[1])
                 xt, yt = calculate_midpoint(coords[-1], coords[-2])
-                # 소수점 이하 넷째 자리까지 반올림
-                xb, yb = f"{xb:.4f}", f"{yb:.4f}"
-                xt, yt = f"{xt:.4f}", f"{yt:.4f}"
+                # 반올림 제거
+                xb, yb = str(xb), str(yb)
+                xt, yt = str(xt), str(yt)
             else:
                 xb, yb, xt, yt = "", "", "", ""
 
@@ -414,12 +418,16 @@ def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', bounda
                 row = [
                     idx,
                     bl_name,
-                    f"{grid_cell.area:.4f}",
-                    f"{coords[0][0]:.4f}", f"{coords[0][1]:.4f}", "0.0",  # X1, Y1, Z1coord
-                    f"{coords[1][0]:.4f}", f"{coords[1][1]:.4f}", "0.0",  # X2, Y2, Z2coord
-                    f"{coords[2][0]:.4f}", f"{coords[2][1]:.4f}", "0.0",  # X3, Y3, Z3coord
-                    f"{coords[3][0]:.4f}" if num_vertices > 3 and len(coords) > 3 else "", f"{coords[3][1]:.4f}" if num_vertices > 3 and len(coords) > 3 else "", "0.0" if num_vertices > 3 and len(coords) > 3 else "",  # X4, Y4, Z4coord
-                    f"{coords[4][0]:.4f}" if num_vertices > 4 and len(coords) > 4 else "", f"{coords[4][1]:.4f}" if num_vertices > 4 and len(coords) > 4 else "", "0.0" if num_vertices > 4 and len(coords) > 4 else "",  # X5, Y5, Z5coord
+                    f"{grid_cell.area}",
+                    str(coords[0][0]), str(coords[0][1]), "0.0",  # X1, Y1, Z1coord
+                    str(coords[1][0]), str(coords[1][1]), "0.0",  # X2, Y2, Z2coord
+                    str(coords[2][0]), str(coords[2][1]), "0.0",  # X3, Y3, Z3coord
+                    str(coords[3][0]) if num_vertices > 3 and len(coords) > 3 else "", 
+                    str(coords[3][1]) if num_vertices > 3 and len(coords) > 3 else "", 
+                    "0.0" if num_vertices > 3 and len(coords) > 3 else "",  # X4, Y4, Z4coord
+                    str(coords[4][0]) if num_vertices > 4 and len(coords) > 4 else "", 
+                    str(coords[4][1]) if num_vertices > 4 and len(coords) > 4 else "", 
+                    "0.0" if num_vertices > 4 and len(coords) > 4 else "",  # X5, Y5, Z5coord
                     xt, yt, "0.0" if yn_value == 'Y' else "",  # XTcoord, YTcoord, ZTcoord
                     xb, yb, "0.0" if yn_value == 'Y' else "",  # XBcoord, YBcoord, ZBcoord
                     "", "", yn_value, ""  # YN, 기타 빈칸 처리
