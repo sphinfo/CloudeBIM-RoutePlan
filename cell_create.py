@@ -462,7 +462,6 @@ def main():
     start_point = args['starting_position']
     start_direction = args['starting_direction']
     repeated_rate = args['repeated_rate']
-    repeated_rate = repeated_rate * 0.01
     cell_size = args['attachment_width']*(1-repeated_rate)
     df1, df2 = direction(df1,df2,start_point, start_direction)
     # print("origin df = ", len(df0))
