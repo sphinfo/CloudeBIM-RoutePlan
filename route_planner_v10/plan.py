@@ -8,6 +8,7 @@ from datetime import datetime
 
 from route_planner_v10.block import Block
 from route_planner_v10.util import log_decorator
+from route_planner_v10.constants import SHOW_ALLOC_CELL_FLAG
 
 
 class DozerRoutePlan:
@@ -28,45 +29,57 @@ class DozerRoutePlan:
         self.N, self.M = max(allocate_cell.keys()), max(self.block_items[1].keys())
         self.timeline = 0
 
+    def add_route(self, coord: dict, allocate_cell_name: str, cell_name: str):
+        if SHOW_ALLOC_CELL_FLAG:
+            coord.update({'allocate_cell_name': allocate_cell_name, 'cell_name': cell_name})
+        self.route_plan.append(coord)
     # 단일 경로 추가
-    def add_single_route_plan(self, coord: dict, forward: bool):
+    def add_single_route_plan(self, coord: dict, forward: bool, allocate_cell_name: str, cell_name: str):
         # coord: {'X':0, 'Y':0, 'Z': 0}
         direction = 1 if forward else -1
         coord.update({'direction': direction})
-        self.route_plan.append(coord)
+
+        self.add_route(coord=coord, allocate_cell_name=allocate_cell_name, cell_name=cell_name)
         logging.getLogger('plan').debug(json.dumps(coord, ensure_ascii=False))
 
     # 경로 추가
-    def add_route_plan(self, block: dict, forward: bool):
+    def add_route_plan(self, block: dict, forward: bool, allocate_cell_name: str, cell_name: str):
         # 'XTcoord': 'x_t', 'YTcoord': 'y_t', 'ZTcoord': 'z_t', 'XBcoord': 'x_b', 'YBcoord': 'y_b', 'ZBcoord': 'z_b', 'cutVol': 'cut_vol', 'fillVol': 'fill_vol', 'totalVol': 'total_vol', 'Y,N': 'yn',
         direction = 1 if forward else -1
         x_t, y_t, z_t, x_b, y_b, z_b = map(block.get, ['x_t', 'y_t', 'z_t', 'x_b', 'y_b', 'z_b'])
         latest_route = self.route_plan[-1] if self.route_plan else {}
+        route = None
         if forward:
             # BOTTOM -> TOP
             # 마지막 경로와 좌표가 같을 경우 경로에 추가하지 않음
             if latest_route.get('x') != x_b or latest_route.get('y') != y_b  or latest_route.get('z') != z_b:
-                self.route_plan.append({'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction})
+                self.route_plan.append({'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}B')
                 logging.getLogger('plan').debug(json.dumps({'X': x_b, 'Y': y_b, 'Z': z_b, '전후진': direction}, ensure_ascii=False))
-            self.route_plan.append({'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction})
+            self.route_plan.append({'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}T')
             logging.getLogger('plan').debug(json.dumps({'X': x_t, 'Y': y_t, 'Z': z_t, '전후진': direction}, ensure_ascii=False))
         else:
             # TOP -> BOTTOM
             if latest_route.get('x') != x_t or latest_route.get('y') != y_t  or latest_route.get('z') != z_t:
-                self.route_plan.append({'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction})
+                self.route_plan.append({'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}T')
                 logging.getLogger('plan').debug(json.dumps({'X': x_t, 'Y': y_t, 'Z': z_t, '전후진': direction}, ensure_ascii=False))
-            self.route_plan.append({'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction})
+            self.route_plan.append({'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}B')
             logging.getLogger('plan').debug(json.dumps({'X': x_b, 'Y': y_b, 'Z': z_b, '전후진': direction}, ensure_ascii=False))
 
     @log_decorator('계획 경로 알고리즘 CSV 저장')
     def save_output_csv(self, output_file: str):
         with open(output_file, 'w', newline='\n', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=['x', 'y', 'direction', 'z1', 'z2'])
+            headers = ['x', 'y', 'direction', 'z1', 'z2' 'allocate_cell_name', 'cell_name'] if SHOW_ALLOC_CELL_FLAG else ['x', 'y', 'direction', 'z1', 'z2']
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
             writer.writeheader()
             for i, v in enumerate(self.route_plan):
                 v.pop('z',None)
                 v['z1'] = 0
                 v['z2'] = 0
+                """
+                if SHOW_ALLOC_CELL_FLAG:
+                    v['할당셀'] = v.pop('allocate_cell_name')
+                    v['대상셀정보'] = v.pop('cell_name')
+                """
             writer.writerows(self.route_plan)
 
 
@@ -144,7 +157,7 @@ class DozerRoutePlan:
                                 'x': self.block_items[j_next-h_num - buffer_j][i_next].get('x_b'),
                                 'y': self.block_items[j_next-h_num - buffer_j][i_next].get('y_b'),
                                 'z': self.block_items[j_next-h_num - buffer_j][i_next].get('z_b')
-                            }, forward=False)
+                            }, forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[j_next-h_num - buffer_j][i_next].get("block_name")}-B')
 
                         # BL_(i_next )_(j_next-1 - buffer_j)의 전방 이동점으로 전진경로 생성
                         logging.getLogger('plan').debug(f'BL_({i_next})_({j_next - 1 - buffer_j})의 전방 이동점으로 전진경로 생성, i_cur:{i_cur}, j_cur: {j_cur}')
@@ -154,12 +167,12 @@ class DozerRoutePlan:
                             'x': self.block_items[j_next - 1 - buffer_j][i_next].get('x_t'),
                             'y': self.block_items[j_next - 1 - buffer_j][i_next].get('y_t'),
                             'z': self.block_items[j_next - 1 - buffer_j][i_next].get('z_t')
-                        }, forward=True)
+                        }, forward=True, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[j_next - 1 - buffer_j][i_next].get("block_name")}-T')
 
                 # BL_(i_next)_(j_max)의 전방 이동점까지 전진경로 생성
                 logging.getLogger('plan').debug(f'BL_({i_next})_({j_max})의 전방 이동점 까지 전진경로 생성')
                 for block in self.allocate_cell[j][i]['cells']:
-                    self.add_route_plan(block=block, forward=True)
+                    self.add_route_plan(block=block, forward=True, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{block.get("block_name")}')
 
                 # 반복 횟수 만큼 반복
                 repeat_count = self.allocate_cell[j][i]['repeat_count']
@@ -169,12 +182,12 @@ class DozerRoutePlan:
                     # BL_(i_next)_(j_min)의 후방 이동점까지 후진경로 생성
                     logging.getLogger('plan').debug(f'BL_({i_next})_({j_min})의 후방 이동점까지 후진경로 생성')
                     for _j in range(j_max, j_min - 1, -1):
-                        self.add_route_plan(block=self.block_items[_j][i_next], forward=False)
+                        self.add_route_plan(block=self.block_items[_j][i_next], forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{block.get("block_name")}')
 
                     # BL_(i_next)_(j_max)의 전방 이동점까지 전진경로 생성
                     logging.getLogger('plan').debug(f'BL_({i_next})_({j_max})의 전방 이동점 까지 전진경로 생성')
                     for block in self.allocate_cell[j][i]['cells']:
-                        self.add_route_plan(block=block, forward=True)
+                        self.add_route_plan(block=block, forward=True, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{block.get("block_name")}')
 
                     # 반복횟수[R] 만족했는가?
                     logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {r}, {not (repeat_count > r)}')
@@ -187,30 +200,30 @@ class DozerRoutePlan:
                     if j % 2 == 1:
                         if self.allocate_outline_cell.get(1, {}).get(j):
                             logging.getLogger('plan').debug(f'OL_1_{j} 작업')
-                            self.outline(j, self.allocate_outline_cell[1][j], self.outline_data['df_l'], h_num, i_cur, j_cur,  j_min, 'df1')
-                            j_cur = j_min - h_num
+                            j_cur = self.outline(j, self.allocate_outline_cell[1][j], self.outline_data['df_l'], h_num, i_cur, j_cur, 'df1')
+
                         else:
                             logging.getLogger('plan').debug(f'OL_1_{j} 작업 - Skip')
                     else:
                         if self.allocate_outline_cell.get(2, {}).get(j):
                             logging.getLogger('plan').debug(f'OL_2_{j} 작업')
-                            self.outline(j, self.allocate_outline_cell[2][j], self.outline_data['df_r'], h_num, i_cur, j_cur,  j_min, 'df2')
-                            j_cur = j_min - h_num
+                            j_cur = self.outline(j, self.allocate_outline_cell[2][j], self.outline_data['df_r'], h_num, i_cur, j_cur, 'df2')
+
                         else:
                             logging.getLogger('plan').debug(f'OL_2_{j} 작업 - Skip')
             # j%2==1
             if j % 2 == 1:
                 if self.allocate_outline_cell.get(2, {}).get(j):
                     logging.getLogger('plan').debug(f'OL_2_{j} 작업')
-                    self.outline(j, self.allocate_outline_cell[2][j], self.outline_data['df_r'], h_num, i_cur, j_cur,  j_min, 'df2')
-                    j_cur = j_min - h_num
+                    j_cur = self.outline(j, self.allocate_outline_cell[2][j], self.outline_data['df_r'], h_num, i_cur, j_cur, 'df2')
+
                 else:
                     logging.getLogger('plan').debug(f'OL_2_{j} 작업 - Skip')
             else:
                 if self.allocate_outline_cell.get(1, {}).get(j):
                     logging.getLogger('plan').debug(f'OL_1_{j} 작업')
-                    self.outline(j, self.allocate_outline_cell[1][j], self.outline_data['df_l'], h_num, i_cur, j_cur, j_min, 'df1')
-                    j_cur = j_min - h_num
+                    j_cur = self.outline(j, self.allocate_outline_cell[1][j], self.outline_data['df_l'], h_num, i_cur, j_cur, 'df1')
+
                 else:
                     logging.getLogger('plan').debug(f'OL_1_{j} 작업 - Skip')
 
@@ -233,16 +246,20 @@ class DozerRoutePlan:
     # alloc_outline_data: [{block}...]
     # center_data: [{'x': 237516.453, 'y': 425177.98, 'z': 0.0}...]
     # outline_data: [{'x': 237516.453, 'y': 425177.98, 'z': 0.0}...]
-    def outline(self, j: int, alloc_outline_data: list, target_outline_data: list, h_num: int, i_cur: int, j_cur: int, alloc_j_min: int, df_name: str):
+    def outline(self, j: int, alloc_outline_data: list, target_outline_data: list, h_num: int, i_cur: int, j_cur: int, df_name: str):
         # j_min = OL_2_j의 셀 중 가장 행 번호가 낮은 셀의 행 번호, j_max = OL_2_j의 셀 중 가장 행 번호가 높은 셀의 행 번호 
         j_items = [list(Block.get_bl_i_j(block))[1] for block in alloc_outline_data]
         j_min, j_max = min(j_items), max(j_items)
         repeat_count = Block.get_repeat_count(alloc_outline_data, self.e)
-        logging.getLogger('plan').debug(f'j_min: {j_min},  j_max: {j_max}')
+        outline_name = f"{'OL_1' if df_name == 'df1' else 'OL_2'}_{j}"
 
-        logging.getLogger('plan').debug(f'BL_({i_cur})_({alloc_j_min}-{h_num}) BL_{i_cur}_{alloc_j_min - h_num}의 후방 이동점 까지 후진경로 생성')
-        for _j in range(j_cur, alloc_j_min - h_num - 1, -1):
-            self.add_route_plan(self.block_items[_j][i_cur], forward=False)
+        logging.getLogger('plan').debug(f'j_min: {j_min},  j_max: {j_max}')
+        logging.getLogger('plan').debug(f'BL_({i_cur})_({j_min}-{h_num}) BL_{i_cur}_{j_min - h_num}의 후방 이동점 까지 후진경로 생성')
+        for _j in range(j_cur, j_min - h_num - 1, -1):
+            # if _j <= 0:
+            #     logging.getLogger('plan').warn('후진 경로 생성 시 1행 미만의 행 접근 발생')
+            #     continue
+            self.add_route_plan(self.block_items[_j][i_cur], forward=False, allocate_cell_name=outline_name, cell_name=f'{self.block_items[_j][i_cur].get("block_name")}')
 
         j_min_offset = 1 if j == 1 else 2
         
@@ -260,40 +277,40 @@ class DozerRoutePlan:
         logging.getLogger('plan').debug(f'{df_name}[{j_max}]를 df0[{j_max}] 방향으로 gap({self.gap}) 만큼 offset 한 좌표까지 전진경로 생성')
         for _j in range(j_min, j_max + 1):
             self.check_outline(target_outline_data, _j)
-            self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=True)
+            self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=True, allocate_cell_name=outline_name, cell_name=f'{df_name}-No-{target_outline_data[_j].get("No")}')
 
         # 반복횟수[R] 만족했는가?
         logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {0}, {not (repeat_count > 0)}')
         for r in range(1, repeat_count + 1):
             # df1 or df2[j_min-j_min_offset] 을 df0[j_min-j_min_offset] 방향으로 gap 만큼 offset 한 좌표까지
             logging.getLogger('plan').debug(f'{df_name}[j_min-{j_min_offset}] 을 df0[j_min-{j_min_offset}] 방향으로 gap({self.gap}) 만큼 offset 하여 후진경로 생성')
-            # self.add_single_route_plan(coord={'X': start_outline.get('x'), 'Y': start_outline.get('y'), 'Z': start_outline.get('z')}, forward=False)
+            # self.add_single_route_plan(coord={'X': start_outline.get('x'), 'Y': start_outline.get('y'), 'Z': start_outline.get('z')}, forward=False, allocate_cell_name=outline_name)
             for _j in range(j_max - 1, j_min - j_min_offset - 1, -1):
                 self.check_outline(target_outline_data, _j)
-                self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=False)
+                self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=False, allocate_cell_name=outline_name, cell_name=f'{df_name}-No-{target_outline_data[_j].get("No")}')
 
             # df1 or df2[j_max]를 df0[j_max] 방향으로 gap 만큼 offset 한 좌표까지 전진경로 생성
             logging.getLogger('plan').debug(f'{df_name}[{j_max}]를 df0[{j_max}] 방향으로 gap({self.gap}) 만큼 offset 한 좌표까지 전진경로 생성')
             for _j in range(j_min, j_max + 1):
                 self.check_outline(target_outline_data, _j)
-                self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=True)
+                self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=True, allocate_cell_name=outline_name, cell_name=f'{df_name}-No-{target_outline_data[_j].get("No")}')
 
             # 반복횟수[R] 만족했는가?
             logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {r}, {not (repeat_count > r)}')
         
         # df1[j_min-1] 을 df0[j_min-1] 방향으로 gap 만큼 offset 한 좌표까지 후진경로 생성
         logging.getLogger('plan').debug(f'{df_name}[j_min-1] 을 df0[j_min-1] 방향으로 gap({self.gap}) 만큼 offset 하여 후진경로 생성')
-        # self.add_single_route_plan(coord={'X': target_outline_data[j_min - 1].get('x'), 'Y': target_outline_data[j_min - 1].get('y'), 'Z': target_outline_data[j_min - 1].get('z')}, forward=False)
+        # self.add_single_route_plan(coord={'X': target_outline_data[j_min - 1].get('x'), 'Y': target_outline_data[j_min - 1].get('y'), 'Z': target_outline_data[j_min - 1].get('z')}, forward=False, allocate_cell_name=outline_name)
         for _j in range(j_max - 1, j_min - 1, -1):
             self.check_outline(target_outline_data, _j)
-            self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=False)
+            self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=False, allocate_cell_name=outline_name, cell_name=f'{df_name}-No-{target_outline_data[_j].get("No")}')
 
         # BL_(i_cur )_(j_cur-H_num)의 후방 이동점으로 후진경로 생성
-        logging.getLogger('plan').debug(f'BL_({i_cur})_({alloc_j_min}-{h_num}) BL_{i_cur}_{alloc_j_min - h_num}의 후방 이동점으로 후진경로 생성')
+        logging.getLogger('plan').debug(f'BL_({i_cur})_({j_min}-{h_num}) BL_{i_cur}_{j_min - h_num}의 후방 이동점으로 후진경로 생성')
         # for _j in range(alloc_j_min, alloc_j_min - h_num - 1, -1):
-        #     self.add_route_plan(self.block_items[_j][i_cur], forward=False)
+        #     self.add_route_plan(self.block_items[_j][i_cur], forward=False, allocate_cell_name=outline_name)
         self.add_single_route_plan(coord={
-            'x': self.block_items[alloc_j_min - h_num][i_cur].get('x_b'),
-            'y': self.block_items[alloc_j_min - h_num][i_cur].get('y_b'),
-            'z': self.block_items[alloc_j_min - h_num][i_cur].get('z_b')
-        }, forward=False)
+            'x': self.block_items[j_min - h_num][i_cur].get('x_b'),
+            'y': self.block_items[j_min - h_num][i_cur].get('y_b'),
+            'z': self.block_items[j_min - h_num][i_cur].get('z_b')
+        }, forward=False, allocate_cell_name=outline_name, cell_name=f'{self.block_items[j_min - h_num][i_cur].get("block_name")}-B')
