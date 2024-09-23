@@ -40,6 +40,108 @@ def create_new_center_line(df1, df2):
         new_df0.loc[len(new_df0)] = {'x': x0, 'y': y0}  # DataFrame에 행 추가
     return new_df0
 
+# 두 점 사이 거리 구하기
+def dist(pt1, pt2) :
+    return ((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2) ** 0.5
+
+# 세 라인에서 노드 사이의 거리 구하기
+def dist_each_node(df0, df1, df2):
+    distances = []
+
+    for i in range(len(df0) - 1):
+        # df0에서 연속된 두 노드 간의 거리
+        x00, y00 = df0.iloc[i]['x'], df0.iloc[i]['y']
+        x01, y01 = df0.iloc[i + 1]['x'], df0.iloc[i + 1]['y']
+        
+        # df1
+        x10, y10 = df1.iloc[i]['x'], df1.iloc[i]['y']
+        x11, y11 = df1.iloc[i + 1]['x'], df1.iloc[i + 1]['y']
+        
+        # df2
+        x20, y20 = df2.iloc[i]['x'], df2.iloc[i]['y']
+        x21, y21 = df2.iloc[i + 1]['x'], df2.iloc[i + 1]['y']
+        
+        
+        # df0에서의 연속된 두 노드 간 거리
+        dist0 = dist([x00, y00], [x01, y01])
+        # df0와 df1 노드 간 거리
+        dist1 = dist([x10, y10], [x11, y11])
+        # df0와 df2 노드 간 거리
+        dist2 = dist([x20, y20], [x21, y21])
+
+        # 각 노드 간 거리 저장
+        distances.append({
+            'df0_dist': dist0,
+            'df1_dist': dist1,
+            'df2_dist': dist2
+        })
+
+    return distances
+
+# 추가할 노드 개수 계산
+def calculate_node_num(node_dist, cell_size) :
+    node_num = math.floor(node_dist/cell_size)
+    
+    node_dist1 = float(node_dist/(node_num+1)) # 노드 개수 1개 추가
+    node_dist2 = float(node_dist/node_num) # 노드 간격 증가
+    
+    node_gap1 = abs(cell_size-node_dist1) # 노드 개수 1개 추가
+    node_gap2 = abs(cell_size-node_dist2) # 노드 간격 증가
+    
+    node_gap = min(node_gap1,node_gap2)
+    
+    if node_gap == node_gap1 :
+         node_num += 1
+    
+    return max(node_num - 1, 0)  # 음수가 나오지 않도록 0보다 작을 경우 0으로 고정
+
+# 노드 추가하기
+def add_node(df0, df1, df2, distances_each_line_node, cell_size):
+    """df0 기준으로 노드 개수를 계산하고, df1 및 df2에도 동일한 개수의 등간격 점을 추가"""
+    new_df0 = []
+    new_df1 = []
+    new_df2 = []
+
+    # df0를 기준으로 노드를 추가
+    for i in range(len(df0) - 1):
+        # 현재 노드 추가
+        new_df0.append([df0.iloc[i]['x'], df0.iloc[i]['y']])
+        new_df1.append([df1.iloc[i]['x'], df1.iloc[i]['y']])
+        new_df2.append([df2.iloc[i]['x'], df2.iloc[i]['y']])
+        
+        # df0의 노드 사이 거리
+        node_dist0 = distances_each_line_node[i]['df0_dist']
+
+        # df0를 기준으로 추가할 노드 개수 계산
+        node_num = calculate_node_num(node_dist0, cell_size)
+
+        # df0에 대해 노드 추가
+        for j in range(1, node_num + 1):
+            new_x0 = df0.iloc[i]['x'] + j * (df0.iloc[i + 1]['x'] - df0.iloc[i]['x']) / (node_num + 1)
+            new_y0 = df0.iloc[i]['y'] + j * (df0.iloc[i + 1]['y'] - df0.iloc[i]['y']) / (node_num + 1)
+            new_df0.append([new_x0, new_y0])
+
+            # df1에 동일한 개수로 등간격 점 추가
+            new_x1 = df1.iloc[i]['x'] + j * (df1.iloc[i + 1]['x'] - df1.iloc[i]['x']) / (node_num + 1)
+            new_y1 = df1.iloc[i]['y'] + j * (df1.iloc[i + 1]['y'] - df1.iloc[i]['y']) / (node_num + 1)
+            new_df1.append([new_x1, new_y1])
+
+            # df2에 동일한 개수로 등간격 점 추가
+            new_x2 = df2.iloc[i]['x'] + j * (df2.iloc[i + 1]['x'] - df2.iloc[i]['x']) / (node_num + 1)
+            new_y2 = df2.iloc[i]['y'] + j * (df2.iloc[i + 1]['y'] - df2.iloc[i]['y']) / (node_num + 1)
+            new_df2.append([new_x2, new_y2])
+
+    # 마지막 노드 추가
+    new_df0.append([df0.iloc[-1]['x'], df0.iloc[-1]['y']])
+    new_df1.append([df1.iloc[-1]['x'], df1.iloc[-1]['y']])
+    new_df2.append([df2.iloc[-1]['x'], df2.iloc[-1]['y']])
+
+    new_df0 = pd.DataFrame(new_df0, columns=['x', 'y'])
+    new_df1 = pd.DataFrame(new_df1, columns=['x', 'y'])
+    new_df2 = pd.DataFrame(new_df2, columns=['x', 'y'])
+
+    return new_df0, new_df1, new_df2
+
 # 외단라인 df csv 업데이트 하기
 def df_update_csv(df0, df1, df2, filename='output/new_df.csv'):
     """Update CSV file with new DataFrames."""
@@ -53,7 +155,6 @@ def df_update_csv(df0, df1, df2, filename='output/new_df.csv'):
     
     # CSV 파일로 저장
     merged_df.to_csv(filename, index=False)
-
 
 # 두 점 거리 구하는 함수
 def calculate_distances(df1, df2):
@@ -339,8 +440,8 @@ def calculate_midpoint(point1, point2):
     midpoint_y = (y1 + y2) / 2.0
     return midpoint_x, midpoint_y
 
-# 중복점 삭제
-def remove_duplicate_points(vertices, tolerance=1e-4):
+# 중복점 삭제, 허용오차 1e-6
+def remove_duplicate_points(vertices, tolerance=1e-6):
     """Remove later instances of duplicate points by comparing each point with every other point."""
     unique_vertices = []
     seen = set()
@@ -358,7 +459,7 @@ def remove_duplicate_points(vertices, tolerance=1e-4):
     return unique_vertices
     
 
-# gird_cell csv 파일 만들기
+# csv 파일 만들기
 def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', boundary_polygon=None, inside_polygons=None, intersecting_cells=None):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     rows = []
@@ -377,6 +478,7 @@ def write_cells_to_csv(grid_cells_dict, filename='output/grid_cells.csv', bounda
             if num_vertices < 3:
                 continue
 
+            # vertices의 좌표를 coords에 저장
             coords = [(coord[0], coord[1]) for coord in vertices]
 
             # 기본 YN 값을 'Y'로 설정
@@ -465,11 +567,16 @@ def main():
     cell_size = args['attachment_width']*(1-repeated_rate)
     df1, df2 = direction(df1,df2,start_point, start_direction)
     # print("origin df = ", len(df0))
+    
+    df0 = create_new_center_line(df1, df2)
+    # 노드 사이의 거리 계산
+    distances_each_line_node = dist_each_node(df0, df1, df2)
+    # 노드 추가 및 새로운 DataFrame 생성
+    df0, df1, df2 = add_node(df0, df1, df2, distances_each_line_node, cell_size)
 
     distances = calculate_distances(df1, df2)
     max_distance = max(distances) # 도로 폭이 최대인 곳
 
-    df0 = create_new_center_line(df1, df2)
     # print("new df = ", len(df0))
     df_update_csv(df0, df1, df2, args['output_newline_file'])  # 새 CSV 파일로 저장
 
