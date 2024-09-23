@@ -53,22 +53,22 @@ class DozerRoutePlan:
             # BOTTOM -> TOP
             # 마지막 경로와 좌표가 같을 경우 경로에 추가하지 않음
             if latest_route.get('x') != x_b or latest_route.get('y') != y_b  or latest_route.get('z') != z_b:
-                self.route_plan.append({'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}B')
+                self.add_route(coord={'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}B')
                 logging.getLogger('plan').debug(json.dumps({'X': x_b, 'Y': y_b, 'Z': z_b, '전후진': direction}, ensure_ascii=False))
-            self.route_plan.append({'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}T')
+            self.add_route(coord={'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}T')
             logging.getLogger('plan').debug(json.dumps({'X': x_t, 'Y': y_t, 'Z': z_t, '전후진': direction}, ensure_ascii=False))
         else:
             # TOP -> BOTTOM
             if latest_route.get('x') != x_t or latest_route.get('y') != y_t  or latest_route.get('z') != z_t:
-                self.route_plan.append({'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}T')
+                self.add_route(coord={'x': x_t, 'y': y_t, 'z': z_t, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}T')
                 logging.getLogger('plan').debug(json.dumps({'X': x_t, 'Y': y_t, 'Z': z_t, '전후진': direction}, ensure_ascii=False))
-            self.route_plan.append({'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}B')
+            self.add_route(coord={'x': x_b, 'y': y_b, 'z': z_b, 'direction': direction}, allocate_cell_name=allocate_cell_name, cell_name=f'{cell_name}B')
             logging.getLogger('plan').debug(json.dumps({'X': x_b, 'Y': y_b, 'Z': z_b, '전후진': direction}, ensure_ascii=False))
 
     @log_decorator('계획 경로 알고리즘 CSV 저장')
     def save_output_csv(self, output_file: str):
         with open(output_file, 'w', newline='\n', encoding='utf-8') as csvfile:
-            headers = ['x', 'y', 'direction', 'z1', 'z2' 'allocate_cell_name', 'cell_name'] if SHOW_ALLOC_CELL_FLAG else ['x', 'y', 'direction', 'z1', 'z2']
+            headers = ['x', 'y', 'direction', 'z1', 'z2', 'allocate_cell_name', 'cell_name'] if SHOW_ALLOC_CELL_FLAG else ['x', 'y', 'direction', 'z1', 'z2']
             writer = csv.DictWriter(csvfile, fieldnames=headers)
             writer.writeheader()
             for i, v in enumerate(self.route_plan):
@@ -146,7 +146,8 @@ class DozerRoutePlan:
                         # BL_(i_next)_(j_next-1) 이 할당 된 적이 있는 셀인가?
                         logging.getLogger('plan').debug(f'BL_(i_next)_(j_next-1)(BL_{i_next}_{j_next-1}) 이 할당 된 적이 있는 셀인가? BL_{i_next}_{j_next-1} in {self.allocate_cell_names}')
                         buffer_j = 1 if f'BL_{i_next}_{j_next-1}' in self.allocate_cell_names else 0
-                        logging.getLogger('plan').debug(f'j_cur({j_cur}) <= j_next({j_next})-H_num({h_num}) {"-1" if buffer_j > 0 else ""} : {j_cur <= j_next - h_num - buffer_j}')
+                        #logging.getLogger('plan').debug(f'j_cur({j_cur}) <= j_next({j_next})-H_num({h_num}) {"-1" if buffer_j > 0 else ""} : {j_cur <= j_next - h_num - buffer_j}')
+                        logging.getLogger('plan').debug(f'j_cur({j_cur}) <= j_next({j_next})-H_num({h_num}) {"-1" if buffer_j > 0 else ""} :')
                         if j_cur > j_next - h_num - buffer_j:
                             # BL_(i_next )_(j_next-H_num - buffer_j)의 후방 이동점으로 후진경로 생성
                             logging.getLogger('plan').debug(f'BL_({i_next})_({j_next-h_num - buffer_j})의 후방 이동점으로 후진경로 생성, i_cur:{i_cur}, j_cur: {j_cur}')
@@ -271,7 +272,7 @@ class DozerRoutePlan:
             'x': start_outline.get('x'),
             'y': start_outline.get('y'),
             'z': start_outline.get('z')
-        }, forward=True)
+        }, forward=True, allocate_cell_name=outline_name, cell_name=f'{df_name}-No-{start_outline.get("No")}')
 
         # df1 or df2[j_max]를 df0[j_max] 방향으로 gap 만큼 offset 한 좌표까지 전진경로 생성
         logging.getLogger('plan').debug(f'{df_name}[{j_max}]를 df0[{j_max}] 방향으로 gap({self.gap}) 만큼 offset 한 좌표까지 전진경로 생성')
@@ -314,3 +315,5 @@ class DozerRoutePlan:
             'y': self.block_items[j_min - h_num][i_cur].get('y_b'),
             'z': self.block_items[j_min - h_num][i_cur].get('z_b')
         }, forward=False, allocate_cell_name=outline_name, cell_name=f'{self.block_items[j_min - h_num][i_cur].get("block_name")}-B')
+
+        return j_min - h_num
