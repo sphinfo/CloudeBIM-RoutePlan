@@ -126,29 +126,36 @@ class Block(object):
         obstacle_cells = [] if not obstacle_cells else obstacle_cells.replace(' ', '').split(',')
 
         # valid float
-        for _k, _v in [('Min_Fwdist', h), ('needed_dist', h), ('Min_Cendist', l), ('blade_width', blade_width), ('equipment_width', equipment_width)]:
+        for _k, _v in [('Min_Fwdist', h), ('needed_dist', h), ('Min_Cendist', l), ('blade_width', blade_width), ('equipment_width', equipment_width), ('Blade_Capacity', e)]:
             Block.valid_float(_k, _v)
 
         # valid int
-        for _k, _v in [('Blade_Capacity', e), ('start_line', start_line)]:
+        for _k, _v in [('start_line', start_line)]:
             Block.valid_integer(_k, _v)
 
         h_num, s_num = math.ceil(h / l), math.ceil(s / l)
         gap = max(blade_width, equipment_width) / 2
 
         outline_data = {'df_l': [], 'df_r': [], 'org_df_l': [], 'org_df_r': []}
-        #for mld in sorted([model_line for model_line in model_line_data if model_line.get('No')], key=lambda x: x.get('No')):        
+        #for mld in sorted([model_line for model_line in model_line_data if model_line.get('No')], key=lambda x: x.get('No')):
+        No = 1
         for mld in model_line_data:
             df0, df1, df2 = map(lambda n: {
                 'x': Block.valid_float(f'x{n}', mld.get(f'x{n}')),
                 'y': Block.valid_float(f'y{n}', mld.get(f'y{n}')),
                 #'z': Block.valid_float(f'z{n}', mld.get(f'z{n}'))
-                'z':-10.0
+                'z':-10.0,
+                'No': No
             }, ['0', '1', '2'])
             outline_data['org_df_l'].append(df1)
             outline_data['org_df_r'].append(df2)
-            outline_data['df_l'].append(Block.offset_point(outline=df1, center=df0, gap=gap))
-            outline_data['df_r'].append(Block.offset_point(outline=df2, center=df0, gap=gap))
+            offeset_df_l = Block.offset_point(outline=df1, center=df0, gap=gap)
+            offeset_df_r = Block.offset_point(outline=df2, center=df0, gap=gap)
+            offeset_df_l.update({'No': No)})
+            offeset_df_r.update({'No': No)})
+            outline_data['df_l'].append(offeset_df_l)
+            outline_data['df_r'].append(offeset_df_r)
+            No+=1
 
         return {
             'e': e,
