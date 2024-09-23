@@ -151,8 +151,8 @@ class Block(object):
             outline_data['org_df_r'].append(df2)
             offeset_df_l = Block.offset_point(outline=df1, center=df0, gap=gap)
             offeset_df_r = Block.offset_point(outline=df2, center=df0, gap=gap)
-            offeset_df_l.update({'No': No)})
-            offeset_df_r.update({'No': No)})
+            offeset_df_l.update({'No': No})
+            offeset_df_r.update({'No': No})
             outline_data['df_l'].append(offeset_df_l)
             outline_data['df_r'].append(offeset_df_r)
             No+=1
