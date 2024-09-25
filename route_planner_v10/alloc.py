@@ -88,9 +88,9 @@ class DozerAlloc():
                     if not moveable:
                         continue
 
-                    # v1.0.1 - 현재셀(BL_i_j)의 직전H_num만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num)은 이동가능(Y) 셀인가?
+                    # v1.0.7 - 현재셀(BL_i_j)의 직전H_num-1만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num-1)은 이동가능(Y) 셀인가?
                     recent_cells = []
-                    for x in range(j - 1, j - h_num - 1, -1):
+                    for x in range(j - 1, j - h_num -1 - 1, -1):
                         block_x, block_name_x = self.block_items[x][i], self.block_items[x][i]['block_name']
                         moveable_x = Block.check_moveable(block_x, obstacle_cells)
                         if x > 0:
@@ -243,7 +243,7 @@ class DozerAlloc():
         return self.allocate_cell, self.allocate_cell_names, self.outline(s_num, obstacle_cells, start_line)
 
     # 할당셀 외단라인 작업
-    def outline(self, s_num: float, obstacle_cells: list,  start_line: int):
+    def outline(self, s_num: float, obstacle_cells: list, start_line:int):
         left_outer_cells, right_outer_cells = [], []
         
         # 2번 유형의 셀(진입 불가이면서 절성토량 존재, 이동 가능(Y) 셀)들과 진입 가능이며 할당되지 않았으며 이동 가능(Y)한 셀 중 2번 유형 셀과 맞닿은 셀들에 대해서 
@@ -280,7 +280,6 @@ class DozerAlloc():
                 if block in right_outer_cells:
                     right_outer_cells.remove(block)
                 continue
-
             if math.ceil(self.M / 2) > block_i:
                 left_outer_cells.append(block) 
             else:
@@ -339,16 +338,16 @@ class DozerAlloc():
                     logging.getLogger('alloc').debug(f'BL_a1_b1 = AL_i_j의 마지막 할당셀 (해당 할당셀에서 행 번호가 가장 높은 셀) BL_a2_b2  = OL_2_j의 원소 일 때,b1>=b2 이면 BL_a2_b2를 OL_2_j 에서 추출: {Block.get_block_names(right_j_outline_cell)}')
                     break
             
-            # BL_a2_b2  = OL_i_1[k] 일 때, BL_a2_(b2+1)이 할당된 적이 있는 셀인가? (마지막행 제외)
+            # v1.0.7 BL_a2_b2  = OL_1_j[k] 일 때, BL_a2_(b2+1)이 할당된 적이 있는 셀인가? (마지막행 제외)
             b21 = 0
-            for cell in left_j_outline_cell:
+            for k, cell in enumerate(left_j_outline_cell):
                 block_i, block_j = Block.get_bl_i_j(cell)
                 if f'BL_{block_i}_{block_j + 1}' in self.allocate_cell_names:
                     b21 = block_j + 1
-                    logging.getLogger('alloc').debug(f'OL_i_1[k] 일 때, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: True')
+                    logging.getLogger('alloc').debug(f'OL_1_j[k({k})] 일 때, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: True')
                     break
                 else:
-                    logging.getLogger('alloc').debug(f'OL_i_1[k] 일 때, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: False')
+                    logging.getLogger('alloc').debug(f'OL_1_j[k({k})] 일 때,, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: False')
 
             # BL_a2_(b2+1)과 동일선상(같은 행)과 그 이후에 있는 셀을 제외한 나머지 셀을 OL_1_j에 할당
             if b21 > 0:
@@ -357,16 +356,16 @@ class DozerAlloc():
             else:
                 self.outline_cell[1][j] = left_j_outline_cell
 
-            # BL_a2_b2  = OL_i_1[k] 일 때, BL_a2_(b2+1)이 할당된 적이 있는 셀인가? (마지막행 제외)
+            # v1.0.7 BL_a2_b2  = OL_2_j[k] 일 때, BL_a2_(b2+1)이 할당된 적이 있는 셀인가? (마지막행 제외)
             b21 = 0
-            for cell in right_j_outline_cell:
+            for k, cell in enumerate(right_j_outline_cell):
                 block_i, block_j = Block.get_bl_i_j(cell)
                 if f'BL_{block_i}_{block_j + 1}' in self.allocate_cell_names:
                     b21 = block_j + 1
-                    logging.getLogger('alloc').debug(f'BL_a2_b2  = OL_i_1[k] 일 때, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: True')
+                    logging.getLogger('alloc').debug(f'BL_a2_b2  = OL_2_j[k({k})] 일 때, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: True')
                     break
                 else:
-                    logging.getLogger('alloc').debug(f'BL_a2_b2  = OL_i_1[k] 일 때, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: False')
+                    logging.getLogger('alloc').debug(f'BL_a2_b2  = OL_2_j[k({k})] 일 때, BL_{block_i}_({block_j}+1)이 할당된 적이 있는 셀인가?: False')
 
             # BL_a2_(b2+1)과 동일선상(같은 행)과 그 이후에 있는 셀을 제외한 나머지 셀을 OL_2_j에 할당
             if b21 > 0:
