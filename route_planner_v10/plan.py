@@ -99,7 +99,7 @@ class DozerRoutePlan:
         logging.getLogger('plan').debug(f'최대 할당셀 열 번호 M = {self.M}, 최대 할당셀 행 번호 N = {self.N}')
 
         i, j = 0, 1
-        i_cur, j_cur = None, None
+        i_cur, j_cur, j_min = None, None, None
         is_first = True
         while(j <= self.N):
             alloc_is_first = True
@@ -132,7 +132,7 @@ class DozerRoutePlan:
                     continue
 
                 i_next, j_next = Block.get_bl_i_j(self.allocate_cell.get(j, {}).get(i, {}).get('cells', [])[0])
-                j_min, j_max = j_next, list(Block.get_bl_i_j(self.allocate_cell.get(j, {}).get(i, {}).get('cells')[-1]))[1]
+                j_max = list(Block.get_bl_i_j(self.allocate_cell.get(j, {}).get(i, {}).get('cells')[-1]))[1]
 
                 # AL_i_j가 전체 할당셀 중 처음 경로를 생성하는 할당셀인가?
                 logging.getLogger('plan').debug(f'AL_{i}_{j}가 전체 할당셀 중 처음 경로를 생성하는 할당셀인가? {is_first}')
@@ -143,22 +143,43 @@ class DozerRoutePlan:
                     # i_next ==i_cur And j_next==j_cur
                     logging.getLogger('plan').debug(f'i_next({i_next}) ==i_cur({i_cur}) And j_next({j_next})==j_cur({j_cur}): {not (i_next != i_cur or j_next != j_cur)}')
                     if i_next != i_cur or j_next != j_cur:
+                        # v1.0.7 직전 경로가 전진 경로인가? (가장 최근 경로의 directio이 1일경우 Y, -1일경우 N)
+                        latest_route = self.route_plan[-1] if self.route_plan else {}
+                        logging.getLogger('plan').debug(f'직전 경로가 전진 경로인가?: {latest_route.get("direction")}')
+                        if latest_route and latest_route.get('direction') == 1:
+                            # BL_(i_cur)_(j_min) 의 후방 이동점까지 후진 경로 생성
+                            logging.getLogger('plan').debug(f'BL_({i_cur})_({j_min})의 후방 이동점까지 후진경로 생성')
+                            for _j in range(j_cur, j_min - 1, -1):
+                                self.add_route_plan(block=self.block_items[_j][i_cur], forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{block.get("block_name")}')
+                            j_cur = j_min
+
                         # BL_(i_next)_(j_next-1) 이 할당 된 적이 있는 셀인가?
                         logging.getLogger('plan').debug(f'BL_(i_next)_(j_next-1)(BL_{i_next}_{j_next-1}) 이 할당 된 적이 있는 셀인가? BL_{i_next}_{j_next-1} in {self.allocate_cell_names}')
                         buffer_j = 1 if f'BL_{i_next}_{j_next-1}' in self.allocate_cell_names else 0
-                        #logging.getLogger('plan').debug(f'j_cur({j_cur}) <= j_next({j_next})-H_num({h_num}) {"-1" if buffer_j > 0 else ""} : {j_cur <= j_next - h_num - buffer_j}')
-                        logging.getLogger('plan').debug(f'j_cur({j_cur}) <= j_next({j_next})-H_num({h_num}) {"-1" if buffer_j > 0 else ""} :')
+                        logging.getLogger('plan').debug(f'j_cur({j_cur}) <= j_next({j_next})-H_num({h_num}) {"-1" if buffer_j > 0 else ""} : {j_cur <= j_next - h_num - buffer_j}')
                         if j_cur > j_next - h_num - buffer_j:
-                            # BL_(i_next )_(j_next-H_num - buffer_j)의 후방 이동점으로 후진경로 생성
-                            logging.getLogger('plan').debug(f'BL_({i_next})_({j_next-h_num - buffer_j})의 후방 이동점으로 후진경로 생성, i_cur:{i_cur}, j_cur: {j_cur}')
-                            if not self.block_items.get(j_next-h_num - buffer_j, {}).get(i_next, {}):
-                                logging.getLogger('plan').error(f'BL_({i_next})_({j_next-h_num - buffer_j})의 Block 정보 없음')
-                            self.block_items[j_next-h_num - buffer_j][i_next].get('x_b')
+                            # v1.0.7 k=j_next-H_num
+                            k = j_next - h_num - buffer_j
+                            logging.getLogger('plan').debug(f'k({k}) = j_next({j_next})-H_num({h_num}){"-1" if buffer_j > 0 else ""}')
+
+                            # BL_(i_cur)_(k) 이 이동 가능한 셀인가?
+                            moveable = Block.check_moveable(self.block_items[k][i_cur], obstacle_cells)
+                            logging.getLogger('plan').debug(f'BL_(i_cur)_(k)이 이동 가능한 셀인가?: {moveable}')
+                            if moveable:
+                                # BL_(i_cur)_(k) 의 후방 이동점까지 후진 경로 생성
+                                logging.getLogger('plan').debug(f'BL_(i_cur)_(k) 의 후방 이동점까지 후진 경로 생성, i_cur:{i_cur}, j_cur: {j_cur}')
+                                for _j in range(j_cur, k - 1, -1):
+                                    self.add_route_plan(block=self.block_items[_j][i_cur], forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[_j][i_cur].get("block_name")}')
+                            else:
+                                if not self.block_items.get(k, {}).get(i_next, {}):
+                                    logging.getLogger('plan').error(f'BL_({i_next})_({k})의 Block 정보 없음')
+                                # BL_(i_next)_(k) 의 후방 이동점으로 후진 경로 생성
+                                logging.getLogger('plan').debug(f'BL_(i_next)_(k) 의 후방 이동점으로 후진 경로 생성, i_cur:{i_cur}, j_cur: {j_cur}')
                             self.add_single_route_plan(coord={
-                                'x': self.block_items[j_next-h_num - buffer_j][i_next].get('x_b'),
-                                'y': self.block_items[j_next-h_num - buffer_j][i_next].get('y_b'),
-                                'z': self.block_items[j_next-h_num - buffer_j][i_next].get('z_b')
-                            }, forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[j_next-h_num - buffer_j][i_next].get("block_name")}-B')
+                                'x': self.block_items[k][i_next].get('x_b'),
+                                'y': self.block_items[k][i_next].get('y_b'),
+                                'z': self.block_items[k][i_next].get('z_b')
+                            }, forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[k][i_next].get("block_name")}-B')
 
                         # BL_(i_next )_(j_next-1 - buffer_j)의 전방 이동점으로 전진경로 생성
                         logging.getLogger('plan').debug(f'BL_({i_next})_({j_next - 1 - buffer_j})의 전방 이동점으로 전진경로 생성, i_cur:{i_cur}, j_cur: {j_cur}')
@@ -169,6 +190,10 @@ class DozerRoutePlan:
                             'y': self.block_items[j_next - 1 - buffer_j][i_next].get('y_t'),
                             'z': self.block_items[j_next - 1 - buffer_j][i_next].get('z_t')
                         }, forward=True, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[j_next - 1 - buffer_j][i_next].get("block_name")}-T')
+
+                # j_min= AL_i_j의 행번호가 가장 낮은 셀의 행번호
+                _, j_min = Block.get_bl_i_j(self.allocate_cell.get(j, {}).get(i, {}).get('cells', [])[0])
+                logging.getLogger('plan').debug(f'j_min({j_min})= AL_i({i})_j({j})의 행번호가 가장 낮은 셀의 행번호')
 
                 # BL_(i_next)_(j_max)의 전방 이동점까지 전진경로 생성
                 logging.getLogger('plan').debug(f'BL_({i_next})_({j_max})의 전방 이동점 까지 전진경로 생성')
@@ -183,7 +208,7 @@ class DozerRoutePlan:
                     # BL_(i_next)_(j_min)의 후방 이동점까지 후진경로 생성
                     logging.getLogger('plan').debug(f'BL_({i_next})_({j_min})의 후방 이동점까지 후진경로 생성')
                     for _j in range(j_max, j_min - 1, -1):
-                        self.add_route_plan(block=self.block_items[_j][i_next], forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{block.get("block_name")}')
+                        self.add_route_plan(block=self.block_items[_j][i_next], forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[_j][i_next].get("block_name")}')
 
                     # BL_(i_next)_(j_max)의 전방 이동점까지 전진경로 생성
                     logging.getLogger('plan').debug(f'BL_({i_next})_({j_max})의 전방 이동점 까지 전진경로 생성')
@@ -268,6 +293,7 @@ class DozerRoutePlan:
         logging.getLogger('plan').debug(f'{df_name}[j_min-{j_min_offset}] 을 df0[j_min-{j_min_offset}] 방향으로 gap({self.gap}) 만큼 offset 하여 전진경로 생성')
         self.check_outline(target_outline_data, j_min - j_min_offset)
         start_outline = target_outline_data[j_min - j_min_offset]
+
         self.add_single_route_plan(coord={
             'x': start_outline.get('x'),
             'y': start_outline.get('y'),
