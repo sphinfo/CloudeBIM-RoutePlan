@@ -1,6 +1,6 @@
 # COPYRIGHT ⓒ 2024 HANYANG UNIVERSITY. ALL RIGHTS RESERVED.
 
-__version__ = '1.0.7'
+__version__ = '1.0.8'
 
 
 if __name__ == '__main__':
