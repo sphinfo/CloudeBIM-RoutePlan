@@ -152,11 +152,11 @@ def set_equipment_space(equipment_length, min_node_dist) :
     return space
 
 # 라인 변경에 필요한 최소 노드 개수
-def get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turning_radius):
+def get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turning_radius, repeated_rate):
     
     required_dist_for_line_change = 0
     if line_change_way == 1 : # 1:후진 후 변경
-        required_dist_for_line_change = turning_radius * 1.45
+        required_dist_for_line_change = turning_radius * 1.3 * (1 - repeated_rate) / 7.5 * 10
     elif line_change_way == 2 : # 2:후진 중 변경
         required_dist_for_line_change = 0
     else : # 3: 삼점 회전법
@@ -256,7 +256,7 @@ def main():
 
     space = set_equipment_space(equipment_length, min_node_dist) # 장비가 들어갈 노드 개수
     
-    requierd_dist_for_line_change_num = get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turning_radius) # 라인변경에 필요한 최소 노드 수
+    requierd_dist_for_line_change_num = get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turning_radius, x_min) # 라인변경에 필요한 최소 노드 수
     min_start_line = requierd_dist_for_line_change_num + space # start_line 최소값
     
     max_start_line = len(df1)-1
@@ -434,6 +434,18 @@ def main():
         for line_num, df in waypoints.items():
             df['direction'] = -1
 
+    # 첫 번째 싸이클의 첫 번째 전진 경로에서만 start_line 이전의 데이터를 제거
+    if 0 in forward_waypoints and 0 in forward_waypoints[0]:
+        first_forward_line = forward_waypoints[0][0]
+        
+        # 첫 번째 전진 경로의 개수와 df1의 개수를 비교하여 몇 개를 삭제해야 하는지 결정
+        num_points_in_first_forward = len(first_forward_line)
+        num_points_in_df1 = len(df1)  # df1의 개수
+
+        num_to_remove = start_line - (num_points_in_df1 - num_points_in_first_forward)-1
+
+        # 해당 인덱스부터 경로 유지
+        forward_waypoints[0][0] = first_forward_line.iloc[num_to_remove:].reset_index(drop=True)
 
     # csv 통합
     combine_and_save_waypoints(forward_waypoints, backward_waypoints, output_file)
