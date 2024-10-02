@@ -243,7 +243,7 @@ class DozerAlloc():
         return self.allocate_cell, self.allocate_cell_names, self.outline(s_num, obstacle_cells, start_line)
 
     # 할당셀 외단라인 작업
-    def outline(self, s_num: float, obstacle_cells: list, start_line:int):
+    def outline(self, s_num: float, obstacle_cells: list, start_line: int):
         left_outer_cells, right_outer_cells = [], []
         
         # 2번 유형의 셀(진입 불가이면서 절성토량 존재, 이동 가능(Y) 셀)들과 진입 가능이며 할당되지 않았으며 이동 가능(Y)한 셀 중 2번 유형 셀과 맞닿은 셀들에 대해서 
@@ -273,6 +273,7 @@ class DozerAlloc():
             # block_i: 열, block_j: 행
             block_i, block_j = Block.get_bl_i_j(block)
 
+            # ------------------ 과기대 수정 ----------------------------
             # 열 번호가 start_line보다 작은 경우 left_outer_cells와 right_outer_cells에서 해당 셀을 제거
             if block_j < start_line:
                 if block in left_outer_cells:
@@ -280,6 +281,7 @@ class DozerAlloc():
                 if block in right_outer_cells:
                     right_outer_cells.remove(block)
                 continue
+            # ------------------ 과기대 수정 ----------------------------
             if math.ceil(self.M / 2) > block_i:
                 left_outer_cells.append(block) 
             else:
