@@ -23,8 +23,7 @@ def read_csv_files(file):
     df0 = pd.DataFrame({'x': mid_x, 'y': mid_y})
 
     return df1, df2, df0
-
-# 두 점 거리 구하는 함수
+# 두 점 거리 구하는 함수(도로 폭)
 def calculate_distances(df1, df2):
     """Calculate distances between points in df1 and df2."""
     distances = []
@@ -35,7 +34,7 @@ def calculate_distances(df1, df2):
         distances.append(distance)
     return distances
 
-# 두 점 거리 구하는 함수(중심 선)
+# 두 점 최소 거리 구하는 함수(중심 선)
 def calculate_min_distances_center_node(df0):
     distances = []
     for i in range(len(df0)-1):
@@ -44,6 +43,126 @@ def calculate_min_distances_center_node(df0):
         distance = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
         distances.append(distance)
     return min(distances)
+
+# 두 점 사이 거리 구하기
+def dist(pt1, pt2) :
+    return ((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2) ** 0.5
+
+# df0 노드 사이의 거리 구하기
+def dist_each_node(df0):
+    distances = []
+
+    for i in range(len(df0) - 1):
+        # df0에서 연속된 두 노드 간의 거리
+        x00, y00 = df0.iloc[i]['x'], df0.iloc[i]['y']
+        x01, y01 = df0.iloc[i + 1]['x'], df0.iloc[i + 1]['y']
+        
+        # df0에서의 연속된 두 노드 간 거리
+        dist0 = dist([x00, y00], [x01, y01])
+
+        # 각 노드 간 거리 저장
+        distances.append({
+            'df0_dist': dist0
+        })
+
+    return distances
+
+# 추가할 노드 개수 계산
+def calculate_node_num(node_dist, effective_width) :
+    node_num = math.floor(node_dist/effective_width)
+    
+    if node_num == 0 :
+        return 0
+    else :
+        node_dist1 = float(node_dist/(node_num+1)) # 노드 개수 1개 추가
+        node_dist2 = float(node_dist/node_num) # 노드 간격 증가
+
+        node_gap1 = abs(effective_width-node_dist1) # 노드 개수 1개 추가
+        node_gap2 = abs(effective_width-node_dist2) # 노드 간격 증가
+
+        node_gap = min(node_gap1,node_gap2)
+
+        if node_gap == node_gap1 :
+                node_num += 1
+    
+        return max(node_num - 1, 0)  # 음수가 나오지 않도록 0보다 작을 경우 0으로 고정
+
+# 노드 추가하기
+def add_node(df0, df1, df2, distances_each_line_node, effective_width):
+    """df0 기준으로 노드 개수를 계산하고, df1 및 df2에도 동일한 개수의 등간격 점을 추가"""
+    new_df0 = []
+    new_df1 = []
+    new_df2 = []
+
+    # df0를 기준으로 노드를 추가
+    for i in range(len(df0) - 1):
+        # 현재 노드 추가
+        new_df0.append([df0.iloc[i]['x'], df0.iloc[i]['y']])
+        new_df1.append([df1.iloc[i]['x'], df1.iloc[i]['y']])
+        new_df2.append([df2.iloc[i]['x'], df2.iloc[i]['y']])
+        
+        # df0의 노드 사이 거리
+        node_dist0 = distances_each_line_node[i]['df0_dist']
+
+        # df0를 기준으로 추가할 노드 개수 계산
+        node_num = calculate_node_num(node_dist0, effective_width)
+
+        # df0에 대해 노드 추가
+        for j in range(1, node_num + 1):
+            new_x0 = df0.iloc[i]['x'] + j * (df0.iloc[i + 1]['x'] - df0.iloc[i]['x']) / (node_num + 1)
+            new_y0 = df0.iloc[i]['y'] + j * (df0.iloc[i + 1]['y'] - df0.iloc[i]['y']) / (node_num + 1)
+            new_df0.append([new_x0, new_y0])
+
+            # df1에 동일한 개수로 등간격 점 추가
+            new_x1 = df1.iloc[i]['x'] + j * (df1.iloc[i + 1]['x'] - df1.iloc[i]['x']) / (node_num + 1)
+            new_y1 = df1.iloc[i]['y'] + j * (df1.iloc[i + 1]['y'] - df1.iloc[i]['y']) / (node_num + 1)
+            new_df1.append([new_x1, new_y1])
+
+            # df2에 동일한 개수로 등간격 점 추가
+            new_x2 = df2.iloc[i]['x'] + j * (df2.iloc[i + 1]['x'] - df2.iloc[i]['x']) / (node_num + 1)
+            new_y2 = df2.iloc[i]['y'] + j * (df2.iloc[i + 1]['y'] - df2.iloc[i]['y']) / (node_num + 1)
+            new_df2.append([new_x2, new_y2])
+
+    # 마지막 노드 추가
+    new_df0.append([df0.iloc[-1]['x'], df0.iloc[-1]['y']])
+    new_df1.append([df1.iloc[-1]['x'], df1.iloc[-1]['y']])
+    new_df2.append([df2.iloc[-1]['x'], df2.iloc[-1]['y']])
+
+    # 새로운 좌표를 DataFrame으로 변환
+    new_df0 = pd.DataFrame(new_df0, columns=['x', 'y'])
+    new_df1 = pd.DataFrame(new_df1, columns=['x', 'y'])
+    new_df2 = pd.DataFrame(new_df2, columns=['x', 'y'])
+
+    return new_df0, new_df1, new_df2
+
+# 점 사이 간격이 min_distance 미만일 때 뒤쪽의 점을 삭제
+def remove_close_points(df0, df1, df2, min_distance):
+    """점 사이의 간격이 min_distance 미만일 때 뒤쪽의 점을 삭제"""
+    i = 0  # 인덱스 초기화
+    while i < len(df0) - 1:  # 매 반복마다 최신 df0의 길이를 확인
+        # df0의 현재 점과 그 다음 점의 거리 계산
+        dist0 = dist([df0.iloc[i]['x'], df0.iloc[i]['y']], [df0.iloc[i + 1]['x'], df0.iloc[i + 1]['y']])
+
+        # 간격이 최소 간격(min_distance)보다 작으면 뒤쪽의 점을 삭제
+        if dist0 < min_distance:
+            # 뒤쪽 점 삭제
+            df0 = df0.drop(i + 1).reset_index(drop=True)
+            df1 = df1.drop(i + 1).reset_index(drop=True)
+            df2 = df2.drop(i + 1).reset_index(drop=True)
+            # i 값을 증가하지 않음: 현재 점과 다음 점을 다시 검사
+        else:
+            i += 1  # 간격이 충분하면 다음 점으로 이동
+    
+    # 마지막 점에서는 앞의 점을 삭제 (필요한 경우)
+    if len(df0) > 1:
+        dist_last = dist([df0.iloc[-2]['x'], df0.iloc[-2]['y']], [df0.iloc[-1]['x'], df0.iloc[-1]['y']])
+        if dist_last < min_distance:
+            # 마지막 점은 앞쪽 점을 삭제
+            df0 = df0.drop(len(df0) - 2).reset_index(drop=True)
+            df1 = df1.drop(len(df1) - 2).reset_index(drop=True)
+            df2 = df2.drop(len(df2) - 2).reset_index(drop=True)
+
+    return df0, df1, df2
 
 # 도로 폭이 가장 클 때, 중복도 구하기
 def first_repeated_rate(model_width, attachment_width, equipment_width, safety_line, x_min):
@@ -243,6 +362,13 @@ def main():
     
     cycle_num = args['cycle_num'] # 싸이클 횟수
     line_change_way = args['line_change_way'] # 1:후진 후 변경, 2:후진 중 변경, 3:3점회전법
+    
+    # df0 노드 사이간 거리 집합
+    distances_each_line_node = dist_each_node(df0)
+    # 노드 추가
+    df0, df1, df2 = add_node(df0, df1, df2, distances_each_line_node, (1-x_min)*attachment_width)
+    # 노드 제거 및
+    df0, df1, df2 = remove_close_points(df0,df1,df2, min_distance=((1-x_min)*attachment_width)/2)
 
     # working_type = "rolling" # rolling : 다짐, grading : 평탄화, fill : 성토 등등
     
@@ -384,18 +510,17 @@ def main():
 
             tmp[current_cycle] = [None] * exact_y
             for j in range(1, exact_y):
-                # Access the DataFrame for the current and previous lines
-                
+                # 현재와 이전 라인 접근
                 previous_line_df = forward_waypoints[current_cycle][j - 1]
                 current_line_df = forward_waypoints[current_cycle][j]
                 
 
-                # Slice the DataFrames
-                first_part_forward_line = current_line_df.iloc[:requierd_dist_for_line_change_num]
-                second_part_forward_line = current_line_df.iloc[requierd_dist_for_line_change_num:]
-                first_part_previous_forward_line = previous_line_df.iloc[:requierd_dist_for_line_change_num]
+                # 데이터 프레임 requierd_dist_for_line_change_num 기준으로 나누기 -> 라인 변경을 하는 곳
+                first_part_forward_line = current_line_df.iloc[:requierd_dist_for_line_change_num].reset_index(drop=True)
+                second_part_forward_line = current_line_df.iloc[requierd_dist_for_line_change_num:].reset_index(drop=True)
+                first_part_previous_forward_line = previous_line_df.iloc[:requierd_dist_for_line_change_num].reset_index(drop=True)
 
-                # Apply the line_change function between the previous and current lines
+                # 라인변경
                 new_forward_line = line_change(first_part_previous_forward_line, first_part_forward_line)
                 
                 updated_forward_waypoints = pd.concat([new_forward_line, second_part_forward_line], ignore_index=True)
@@ -413,8 +538,8 @@ def main():
 
             for j in range(exact_y):
                 if j < exact_y - 1:
-                    current_line_waypoints = backward_waypoints[current_cycle][j]
-                    next_line_waypoints = backward_waypoints[current_cycle][j+1]
+                    current_line_waypoints = backward_waypoints[current_cycle][j].reset_index(drop=True)
+                    next_line_waypoints = backward_waypoints[current_cycle][j+1].reset_index(drop=True)
 
                     new_backward_line = line_change(current_line_waypoints, next_line_waypoints)
                     backward_waypoints[current_cycle][j] = new_backward_line
