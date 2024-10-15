@@ -285,9 +285,6 @@ def main():
     output_file = args['output_file']
     df0, df1, df2 = read_csv_files(input_file)
     
-    # df1과 df2 사이의 모든 노드간 거리
-    distances = calculate_distances(df1, df2)
-    
     # df0 노드 사이간 거리 집합
     distances_each_line_node = dist_each_node(df0)
     
@@ -296,6 +293,9 @@ def main():
 
     # 노드 제거 및 df0, df1, df2 업데이트
     df0, df1, df2 = remove_close_points(df0,df1,df2, min_distance=((1-x_min)*attachment_width)/2)
+
+    # df1과 df2 사이의 모든 노드간 거리
+    distances = calculate_distances(df1, df2)
     
     max_distance = max(distances) # 도로 폭이 최대인 곳
     min_distance = min(distances) # 도로 폭이 최소인 곳
