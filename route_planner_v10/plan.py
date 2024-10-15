@@ -171,7 +171,7 @@ class DozerRoutePlan:
                             moveable = Block.check_moveable(self.block_items[k][i_cur], obstacle_cells)
                             logging.getLogger('plan').debug(f'BL_(i_cur)_(k)이 이동 가능한 셀인가?: {moveable}')
                             if moveable:
-                                # ------------------- 과기대 수정 ----------------------  
+                                # ------------------- 과기대 수정 from ----------------------  
                                 # 수정 내용 : BL_(i_cur)_(j_min)의 후방점으로 부터 -> BL_(i_cur)_(j_cur)의 후방점으로 부터
                                 # v1.0.8 BL_(i_cur)_(j_min) 의 후방 이동점으로 부터
                                 # BL_(i_cur)_(k) 의 후방 이동점까지 후진 경로 생성
@@ -183,7 +183,7 @@ class DozerRoutePlan:
                                 }, forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[j_cur][i_cur].get("block_name")}-B')
                                 for _j in range(j_cur - 1, k - 1, -1):
                                     self.add_route_plan(block=self.block_items[_j][i_cur], forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[_j][i_cur].get("block_name")}')
-                                # ------------------ 과기대 수정 ----------------------------
+                                # ------------------ 과기대 수정 end ----------------------------
                             else:
                                 if not self.block_items.get(k, {}).get(i_next, {}):
                                     logging.getLogger('plan').error(f'BL_({i_next})_({k})의 Block 정보 없음')
@@ -194,7 +194,6 @@ class DozerRoutePlan:
                                     'Y': self.block_items[k][i_next].get('y_b'),
                                     'Z': self.block_items[k][i_next].get('z_b')
                                 }, forward=False, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{self.block_items[k][i_next].get("block_name")}-B')
-                                # ----------------------------- 과기대 수정 --------------------------------------
 
                         # BL_(i_next )_(j_next-1 - buffer_j)의 전방 이동점으로 전진경로 생성
                         logging.getLogger('plan').debug(f'BL_({i_next})_({j_next - 1 - buffer_j})의 전방 이동점으로 전진경로 생성, i_cur:{i_cur}, j_cur: {j_cur}')
@@ -217,9 +216,13 @@ class DozerRoutePlan:
 
                 # 반복 횟수 만큼 반복
                 repeat_count = self.allocate_cell[j][i]['repeat_count']
+                # ------------------ 과기대 수정 from ----------------------------
+                # "current r: {0}" -> "current r : {1}"로 수정, "repeat_count > 0" -> "repeat_count > 1" 로 수정
+                # "for r in range(1, repeat_count + 1):" -> "for r in range(2, repeat_count + 1):" 로 변경
                 # 반복횟수[R] 만족했는가?
-                logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {0}, {not (repeat_count > 0)}')
-                for r in range(1, repeat_count + 1):
+                logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {1}, {not (repeat_count > 1)}')
+                for r in range(2, repeat_count+1):
+                # ------------------ 과기대 수정 end ----------------------------
                     # BL_(i_next)_(j_min)의 후방 이동점까지 후진경로 생성
                     logging.getLogger('plan').debug(f'BL_({i_next})_({j_min})의 후방 이동점까지 후진경로 생성')
                     for _j in range(j_max, j_min - 1, -1):
@@ -298,7 +301,7 @@ class DozerRoutePlan:
         j_min_offset = 1 if j == 1 else 2
         
         # v1.0.8 BL_(i_cur )_(j_min-H_num-1)의 후방 이동점 까지 후진경로 생성
-        # ------------------ 과기대 수정 ----------------------------
+        # ------------------ 과기대 수정 from ----------------------------
         # BL_(i_cur)_(j_cur)의 후방 이동점에서부터 후진 경로 생성 추가
         logging.getLogger('plan').debug(f'BL_(i_cur({i_cur}))_(j_cur({j_cur}))의 후방 이동점에서부터 후진 경로 생성')
         self.add_single_route_plan(coord={
@@ -311,7 +314,7 @@ class DozerRoutePlan:
         for _j in range(j_cur - 1, j_min - h_num - j_min_offset, -1):
             self.add_route_plan(self.block_items[_j][i_cur], forward=False, allocate_cell_name=outline_name, cell_name=f'{self.block_items[_j][i_cur].get("block_name")}')
 
-        # ------------------ 과기대 수정 ----------------------------
+        # ------------------ 과기대 수정 end ----------------------------
 
         # df1 or df2[j_min-j_min_offset] 을 df0[j_min-j_min_offset] 방향으로 gap 만큼 offset 한 좌표까지 전진경로 생성
         logging.getLogger('plan').debug(f'{df_name}[j_min-{j_min_offset}] 을 df0[j_min-{j_min_offset}] 방향으로 gap({self.gap}) 만큼 offset 하여 전진경로 생성')
@@ -330,9 +333,13 @@ class DozerRoutePlan:
             self.check_outline(target_outline_data, _j)
             self.add_single_route_plan(coord={'x': target_outline_data[_j].get('x'), 'y': target_outline_data[_j].get('y'), 'z': target_outline_data[_j].get('z')}, forward=True, allocate_cell_name=outline_name, cell_name=f'{df_name}-No-{target_outline_data[_j].get("No")}')
 
+        # ------------------ 과기대 수정 from ----------------------------
+        # "current r: {0}" -> "current r : {1}"로 수정, "repeat_count > 0" -> "repeat_count > 1" 로 수정
+        # "for r in range(1, repeat_count + 1):" -> "for r in range(2, repeat_count + 1):" 로 변경
         # 반복횟수[R] 만족했는가?
-        logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {0}, {not (repeat_count > 0)}')
-        for r in range(1, repeat_count + 1):
+        logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {1}, {not (repeat_count > 1)}')
+        for r in range(2, repeat_count + 1):
+        # ------------------ 과기대 수정 end ----------------------------    
             # df1 or df2[j_min-j_min_offset] 을 df0[j_min-j_min_offset] 방향으로 gap 만큼 offset 한 좌표까지
             logging.getLogger('plan').debug(f'{df_name}[j_min-{j_min_offset}] 을 df0[j_min-{j_min_offset}] 방향으로 gap({self.gap}) 만큼 offset 하여 후진경로 생성')
             # self.add_single_route_plan(coord={'X': start_outline.get('x'), 'Y': start_outline.get('y'), 'Z': start_outline.get('z')}, forward=False, allocate_cell_name=outline_name)
