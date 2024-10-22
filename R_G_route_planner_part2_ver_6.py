@@ -367,11 +367,10 @@ def main():
     distances_each_line_node = dist_each_node(df0)
     # 노드 추가
     df0, df1, df2 = add_node(df0, df1, df2, distances_each_line_node, (1-x_min)*attachment_width)
-    # 노드 제거 및
+    # 노드 제거
     df0, df1, df2 = remove_close_points(df0,df1,df2, min_distance=((1-x_min)*attachment_width)/2)
-
-    # working_type = "rolling" # rolling : 다짐, grading : 평탄화, fill : 성토 등등
-    
+    # 인덱스 초기화
+    df0, df1, df2 = df0.reset_index(drop=True), df1.reset_index(drop=True), df2.reset_index(drop=True) 
     # 시작 위치가 B->A 일 경우 df1과 df2, df0 역순으로 정렬
     if starting_direction == "B" :
         df1 = df1.iloc[::-1].reset_index(drop=True)
@@ -421,8 +420,8 @@ def main():
     # df_none_work_area_2 : end_line 이후의 구역
     df1_none_work_area_1, df1_work_area, df1_none_work_area_2, df2_none_work_area_1, df2_work_area, df2_none_work_area_2 = set_work_area(df1, df2, start_line, end_line)            
     
-    df1_none_work_area_1 = df1_none_work_area_1.iloc[space:]
-    df2_none_work_area_1 = df2_none_work_area_1.iloc[space:]
+    df1_none_work_area_1 = df1_none_work_area_1.iloc[-requierd_dist_for_line_change_num:]
+    df2_none_work_area_1 = df2_none_work_area_1.iloc[-requierd_dist_for_line_change_num:]
 
     df1_work_area = pd.concat([df1_none_work_area_1, df1_work_area])
     df2_work_area = pd.concat([df2_none_work_area_1, df2_work_area])
@@ -436,8 +435,9 @@ def main():
     [3, 10]
     ]
 
+    # df1과 df2 사이의 모든 노드간 거리
     distances = calculate_distances(df1, df2)
-    
+
     max_distance = max(distances) # 도로 폭이 최대인 곳
     min_distance = min(distances) # 도로 폭이 최소인 곳
 
@@ -563,12 +563,7 @@ def main():
     if 0 in forward_waypoints and 0 in forward_waypoints[0]:
         first_forward_line = forward_waypoints[0][0]
         
-        # 첫 번째 전진 경로의 개수와 df1의 개수를 비교하여 몇 개를 삭제해야 하는지 결정
-        num_points_in_first_forward = len(first_forward_line)
-        num_points_in_df1 = len(df1)  # df1의 개수
-
-        num_to_remove = start_line - (num_points_in_df1 - num_points_in_first_forward)-1
-
+        num_to_remove = requierd_dist_for_line_change_num
         # 해당 인덱스부터 경로 유지
         forward_waypoints[0][0] = first_forward_line.iloc[num_to_remove:].reset_index(drop=True)
 
