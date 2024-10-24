@@ -1,0 +1,75 @@
+##https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#managing-envs
+
+bash Miniconda3-py39_4.12.0-Linux-x86_64.sh
+conda update conda
+
+#pdal 설치
+conda create -n pdal python=3.10.6
+#conda env 삭제
+#conda env remove -n myenv
+conda install -c conda-forge gdal
+conda install -c conda-forge pdal
+pip install geojson
+
+
+#최적경로
+conda create -n route python=3.9.13
+conda install -c conda-forge gcc
+conda install -c anaconda unixodbc
+conda install -c anaconda cmake
+conda install -c conda-forge make
+conda install -c conda-forge gxx_linux-64
+
+pip install matplotlib
+pip install pyodbc
+pip install numpy
+pip install pulp
+pip install geojson
+
+#pymesh python 3.6.15
+conda create -n pymesh python=3.6.13
+conda install -c omnia eigen3
+conda install -c conda-forge gmp
+
+conda install -c conda-forge mpfr
+conda install -c conda-forge boost
+conda install -c conda-forge tbb
+conda install -c conda-forge doxygen
+conda install -c conda-forge scotch
+conda install -c conda-forge clang
+conda install -c anaconda mesa-libgl-cos6-x86_64
+#conda install -c conda-forge mesalib
+#conda install -c conda-forge gxx_linux-64
+sudo apt install libgl1-mesa-glx
+conda install -c conda-forge gcc
+conda install -c anaconda cmake
+#conda create -y -n pymesh -c conda-forge pymesh2
+
+
+
+#conda install -c open3d-admin open3d
+#open3d, openmesh
+pip install --ignore-installed certifi
+pip install geopandas
+#pip install parmap
+#pip install laspy
+pip install numpy
+pip install open3d	
+pip install trimesh
+#pip install seaborn
+pip install openmesh #ubuntu
+#conda install -c conda-forge openmesh-python #centos
+pip install rtree
+pip install geojson
+
+#계획경로 2024 ver.
+conda create -n routev2 python=3.12.1 
+pip install numpy==1.26.3
+pip install pandas==2.1.4
+pip install matplotlib==3.8.3
+pip install geopandas
+pip install geojson
+
+
+# IFC
+conda create -n ifc -c conda-forge ifcopenshell pythonocc-core
