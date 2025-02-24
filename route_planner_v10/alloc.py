@@ -5,8 +5,9 @@ import math
 import logging
 from os import makedirs
 from datetime import datetime
-from route_planner_v10.util import log_decorator
+from route_planner_v10.util import log_decorator, calculate_space, calculate_s_num
 from route_planner_v10.block import Block
+from route_planner_v10.exception import InputDataError
 
 
 class DozerAlloc():
@@ -55,18 +56,72 @@ class DozerAlloc():
     # 라인변경에 필요한 거리: needed dist -> h
     # 중심선 노드간 최소거리: -> l
     # 장애물 셀 지정: Obstacle Cell oc
-    @log_decorator('도저 할당셀 알고리즘')
+    @log_decorator('할당셀 알고리즘')
     def alloc(self, param: dict):
+        
+        (
+            e, s, h, l, obstacle_cells, tmp_start_line,
+            required_line_change_distance, equipment_length,
+            equipment, distances, turning_radius, repeated_rate,
+            end_line, gap, safety_line_df1, safety_line_df2
+        ) = map(
+            param.get, ['e', 's', 'h', 'l', 'obstacle_cells', 'start_line',
+                        'required_line_change_distance', 'equipment_length',
+                        'equipment', 'distances', 'turning_radius', 'repeated_rate',
+                        'end_line', 'gap', 'safety_line_df1', 'safety_line_df2'])
 
-        e, s, h, l, obstacle_cells, start_line, h_num, s_num = map(
-            param.get, ['e', 's', 'h', 'l', 'obstacle_cells', 'start_line', 'h_num', 's_num'])
+        # v1.1.0 두 칸 고정
+        BUFFER_CELL_COUNT = 2
+        
+        # 장애물 셀에 대해 이동 가능 값 ->N으로 설정 절성토량 -> 삭제(null)
+        logging.getLogger('alloc').debug(f'장애물 셀({obstacle_cells})에 대해 이동 가능 값 ->N으로 설정 절성토량 -> 삭제(null)')
+        for block_name in obstacle_cells:
+            block = Block.get_block_by_name(self.block_items, block_name)
+            logging.getLogger('alloc').debug(f'{block["block_name"]}, YN: {block["yn"]} -> N, fill: {block["fill_vol"]} -> 0, cut: {block["cut_vol"]} -> 0, total: {block["total_vol"]} -> 0')
+            block['yn'], block['fill_vol'], block['cut_vol'], block['total_vol'] = 'N', 0, 0, 0
 
-        # h_num이거나 두칸
-        buffer_cell_count = 2
+        # M == 1? 경로 생성 불가
+        if self.M < 2:
+            raise InputDataError(f'Unable to create route, M: {self.M}')
+        # M == 2? 2번 유형셀 변경 및 해당 셀 전, 후방 이동점 재생성
+        if self.M == 2:
+            _, case_2_cells = Block.get_cell_1_2(self.block_items, self.allocate_cell_names, obstacle_cells)
+            for block in case_2_cells.values():
+                # 2번유형의 셀의 이동 가능 값을 N -> Y로 수정
+                logging.getLogger('alloc').debug(f'2번유형의 셀({block["block_name"]})의 이동 가능 값을 {block["yn"]} -> Y로 수정')
+                block['yn'] = 'Y'
+
+            for _k, _v in self.block_items.items():
+                for _i, block in _v.items():
+                    block_i, _ = Block.get_bl_i_j(block)
+
+                    target_df_name, df_name = ('df_l', 'df1') if block_i == 1 else ('df_r', 'df2')
+                    # 후방 이동점 = df?[j-1]을 df0 방향으로 gap_{}만큼 offset한 점
+                    block['x_b'], block['y_b'], block['z_b'] = map(lambda x: self.outline_data[target_df_name][_k - 1][x], ['safe_x', 'safe_y', 'safe_z'])
+                    logging.getLogger('alloc').debug(f' 후방 이동점 = {df_name}[{_k - 1}]을 df0 방향으로 gap_만큼 offset한 점, x_b: {block["x_b"]}, y_b: {block["y_b"]}, z_b: {block["z_b"]}')
+                    # 전방 이동점 = df?[j]을 df0 방향으로 gap_{}만큼 offset한 점
+                    block['x_t'], block['y_t'], block['z_t'] = map(lambda x: self.outline_data[target_df_name][_k][x], ['safe_x', 'safe_y', 'safe_z'])
+                    logging.getLogger('alloc').debug(f' 전방 이동점 = {df_name}[{_k}]을 df0 방향으로 gap_만큼 offset한 점, x_t: {block["x_t"]}, y_t: {block["y_t"]}, z_t: {block["z_t"]}')
+
+                logging.getLogger('alloc').debug(f'해당 셀({block["block_name"]})의 전, 후방 이동점 재생성 완료, {block}')
+
+        # v1.1.0 그레이더 일 경우 라인변경에 필요한 거리 다시 계산
+        logging.getLogger('alloc').debug(f'작업 장비가 도저인가? {equipment == "grader"} equipment: {equipment}')
+        if equipment == 'grader':
+            logging.getLogger('alloc').debug(f'required_line_change_distance: {required_line_change_distance} -> {turning_radius * 1.3 * (1 - repeated_rate) / 7.5 * 10}')
+            required_line_change_distance = turning_radius * 1.3 * (1 - repeated_rate) / 7.5 * 10 
+
+        # v1.1.0 Start Line 계산
+        start_line = self.get_start_line(tmp_start_line, distances, required_line_change_distance=required_line_change_distance, equipment_length=equipment_length)
+        logging.getLogger('alloc').debug(f'최소 Start Line 계산 및 변경, {tmp_start_line} -> {start_line}')
+
+        if end_line is not None and start_line > end_line:
+            logging.getLogger('alloc').error(f'start_line, end_line 값을 확인해주세요. start_line: {start_line}, end_line: {end_line}')
+            raise InputDataError(f'Please check start_line or end_line value, start_line: {start_line}, end_line: {end_line}')
 
         logging.getLogger('alloc').debug(f'불도저 버켓용량(e): {e}, 최소전진거리(s): {s}, 라인변경에 필요한 거리(h): {h}, 중심선 노드간 최소거리(l): {l}')
-        logging.getLogger('alloc').debug(f'장애물셀: {obstacle_cells}, Start Line: {start_line}')
-        logging.getLogger('alloc').debug(f'라인변경에 필요한 셀 칸수 산정(H_num): {h_num}, 최소 할당하는셀의 개수 산정(S_num): {s_num}')
+        logging.getLogger('alloc').debug(f'장애물셀: {obstacle_cells}, Start Line: {start_line}, distances: {distances}')
+        logging.getLogger('alloc').debug(f'라인변경에 필요한 거리(required_line_change_distance): {required_line_change_distance}, 장비길이(equipment_length): {equipment_length}')
         logging.getLogger('alloc').debug(f'최대 열 번호 M = {self.M}, 최대 행 번호 N = {self.N}')
 
         # current_j[]는 M개의 배열, 모든 원소 값 = start_line-1
@@ -78,32 +133,46 @@ class DozerAlloc():
         while (min(current_j) < self.N):
             k += 1
             logging.getLogger('alloc').debug(f'k: {k}')
+
             for i in range(1, self.M + 1):
                 for j in range(current_j[i - 1] + 1, self.N + 1):
-                    # BL_i_j가 이동 가능한가?
-                    block_name = self.block_items[j][i]['block_name']
-                    moveable = Block.check_moveable(self.block_items[j][i], obstacle_cells)
-                    logging.getLogger('alloc').debug(f'BL_i_j({block_name})가 이동 가능한가?: {moveable}')
+                    # BL_i_j가 이동 가능한가? v1.2.1 0행 이하일 경우 이동 불가
+                    moveable = False
+                    if j > 0:
+                        moveable = Block.check_moveable(self.block_items[j][i], obstacle_cells)
+                        logging.getLogger('alloc').debug(f'BL_i_j(BL_{i}_{j})가 이동 가능한가?: {moveable}')
 
                     if not moveable:
                         continue
 
+                    # v1.1.0 h_num=calculate_space(j, required_line_change_distance)
+                    h_num = calculate_space(j, required_line_change_distance, distances)
+                    # v1.1.0 space=calculate_space(j-h_num, equipment_length)
+                    space=calculate_space(j-h_num, equipment_length, distances)
+
                     # v1.0.7 - 현재셀(BL_i_j)의 직전H_num-1만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num-1)은 이동가능(Y) 셀인가?
+                    # v1.1.0 - 현재셀(BL_i_j)의 H_num+space만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num-space)은 이동가능(Y) 셀인가?
+
                     recent_cells = []
-                    for x in range(j - 1, j - h_num -1 - 1, -1):
-                        block_x, block_name_x = self.block_items[x][i], self.block_items[x][i]['block_name']
-                        moveable_x = Block.check_moveable(block_x, obstacle_cells)
+
+                    for x in range(j - 1, j - h_num - space -1, -1):
+                        # v1.2.1 0행 이하일 경우 이동 불가
+                        moveable_x = False
                         if x > 0:
-                            recent_cells.append(f"{block_name_x}: {moveable_x}")
-                            if not moveable_x:
-                                moveable = False
-                                # break # 전부 이동가능하여야 하므로 False일 경우 다음 loop는 체크할 필요가 없으나 debugging 용도로 전부 계산( 추후 break 하면됨)
-                        else:
+                            moveable_x = Block.check_moveable(self.block_items[x][i], obstacle_cells)
+                        recent_cells.append(f"BL_{i}_{x}): {moveable_x}")
+
+                        if not moveable_x:
+                            # 전부 이동가능하여야 하므로 False일 경우 loop 종료
                             moveable = False
-                            # break # 전부 이동가능하여야 하므로 False일 경우 다음 loop는 체크할 필요가 없으나 debugging 용도로 전부 계산( 추후 break 하면됨)
-                    logging.getLogger('alloc').debug(f'현재셀(BL_i_j)의 직전H_num({h_num})만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num)은 이동가능(Y) 셀인가?: {moveable}, {recent_cells}')
+                            break
+
+                    logging.getLogger('alloc').debug(f'현재셀(BL_i_j(BL_{i}_{j}))의 H_num+space({h_num + space})만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num)은 이동가능(Y) 셀인가?: {moveable}, {recent_cells}')
                     
                     if moveable:
+                        # v1.1.0  S_num=calculate_s_num(j)
+                        s_num = calculate_s_num(j, s, distances)
+
                         target = self.allocate_cell.setdefault(k, {})
                         alloc_cell_info = target.setdefault(i, {})
                         alloc_cell_info['name'] = f'AL_{i}_{k}'
@@ -111,8 +180,9 @@ class DozerAlloc():
 
                         # BL_i_j 를 AL_i_k에 할당
                         alloc_cell.append(self.block_items[j][i])
-                        logging.getLogger('alloc').debug(f'해당셀({block_name}) 할당, AL_{i}_{k}: {[c.get("block_name") for c in alloc_cell]}')
+                        logging.getLogger('alloc').debug(f'해당셀(BL_{i}_{j})) 할당, AL_{i}_{k}: {[c.get("block_name") for c in alloc_cell]}')
 
+                        y = 1
                         for y in range(1, self.N - j + 1):
                             # S_num만큼 할당했는가?
                             logging.getLogger('alloc').debug(f'S_num({s_num})만큼 할당했는가?: {len(alloc_cell) >= s_num}')
@@ -120,7 +190,7 @@ class DozerAlloc():
                             if len(alloc_cell) < s_num: # S_num만큼 할당했는가? -> NO
                                 # j <= N
                                 if j + y in self.block_items:
-                                    # BL_i_j+y가 진입 가능(Y)한가?
+                                    # BL_i_j+y가 이동 가능(Y)한가?
                                     is_alloc = Block.check_moveable(self.block_items[j + y][i], obstacle_cells)
                                     logging.getLogger('alloc').debug(f'BL_i_j({self.block_items[j + y][i]["block_name"]})가 이동 가능한가?: {is_alloc}')
 
@@ -128,6 +198,8 @@ class DozerAlloc():
                                         # BL_i_j 를 AL_i_k에 할당
                                         alloc_cell.append(self.block_items[j + y][i])
                                         logging.getLogger('alloc').debug(f'해당셀({self.block_items[j + y][i]["block_name"]}) 할당, AL_{i}_{k}: {[c.get("block_name") for c in alloc_cell]}')
+                                    else:
+                                        break                                        
                             else: # S_num만큼 할당했는가? -> YES
                                 # 할당셀에 대한 절성토량(Vs) 산출
                                 vs = sum([c.get('total_vol') for c in alloc_cell])
@@ -170,14 +242,14 @@ class DozerAlloc():
             #     logging.getLogger('alloc').debug(f'self.allocate_cell[{v2["name"]}]: K: {k} R: {v2["repeat_count"]}, cells: {[c.get("block_name") for c in v2["cells"]]}')
             # logging.getLogger('alloc').debug(f'################################################################################################################################################')
 
-            # 각 할당셀의 첫 셀의 행이 start_j이고, 이값들의 배열을 arr_start_j라고 했을 때, min(arr_start_j)을 기준으로 각 할당셀의 첫 셀의 행(start_j)이 2칸(혹은h_num) 초과인 경우(min(arr_start_j) +2(혹은h_num) < start_j) 할당셀 전체 제거
+            # 각 할당셀의 첫 셀의 행이 start_j이고, 이값들의 배열을 arr_start_j라고 했을 때, min(arr_start_j)을 기준으로 각 할당셀의 첫 셀의 행(start_j)이 2칸 초과인 경우(min(arr_start_j) +2 < start_j) 할당셀 전체 제거
             # k == 1 일 때는 min(arr_start_j)를 기준으로 start_j !=min(arr_start_j)인 할당셀 전체 제거
             if k in self.allocate_cell:
                 arr_start_j = [_alloc_cell_info['min_j'] for _alloc_cell_info in self.allocate_cell[k].values()]
                 min_start_j = min(arr_start_j)
-                logging.getLogger('alloc').debug(f'각 할당셀의 첫 셀의 행이 start_j이고, 이값들의 배열을 arr_start_j라고 했을 때, min(arr_start_j)을 기준으로 각 할당셀의 첫 셀의 행(start_j)이 2칸(혹은h_num) 초과인 경우(min(arr_start_j) +2(혹은h_num) < start_j) 할당셀 전체 제거')
+                logging.getLogger('alloc').debug(f'각 할당셀의 첫 셀의 행이 start_j이고, 이값들의 배열을 arr_start_j라고 했을 때, min(arr_start_j)을 기준으로 각 할당셀의 첫 셀의 행(start_j)이 2칸 초과인 경우(min(arr_start_j) +2 < start_j) 할당셀 전체 제거')
                 logging.getLogger('alloc').debug(f'arr_start_j: {arr_start_j}, min(arr_start_j): {min_start_j}')
-                _buffer_cell_count = 0 if k == 1 else buffer_cell_count
+                _buffer_cell_count = 0 if k == 1 else BUFFER_CELL_COUNT
 
                 # start_j > min(arr_start_j) + _buffer_cell_count 인 할당셀 전체 제거 - k == 1 일 때는 0, 
                 for _i in list(self.allocate_cell[k].keys()):
@@ -204,11 +276,6 @@ class DozerAlloc():
                         del self.allocate_cell[k][_i]
                         continue
 
-                    # TODO: (최종 납기 시 삭제) 할당셀의 반복 횟수 재계산 (추가 여부 확인 필요) -알고리즘 변경됐는지 확인
-                    # if org_length != len(self.allocate_cell[k][_i]['cells']):
-                    #     vs = sum([c.get('total_vol') for c in alloc_cell])
-                    #     self.allocate_cell[k][_i]['repeat_count'] = math.ceil(abs(vs / e))
-
             for _i in range(1, self.M + 1):
                 if current_j[_i - 1] == self.N:
                     logging.getLogger('alloc').debug(f'current_j[{_i - 1}]({current_j[_i - 1]}) == N({self.N}) : {current_j[_i - 1] == self.N}')
@@ -226,62 +293,34 @@ class DozerAlloc():
                             current_j[_i - 1] = start_line - 1
                             logging.getLogger('alloc').debug(f'AL_{_i}_*에 할당된 셀이 존재 하지 않음, current_j[{_i - 1}] = {start_line - 1}')
 
-            # logging.getLogger('alloc').debug(f'################################################################################################################################################')
-            # for _, v2 in self.allocate_cell[k].items():
-            #     logging.getLogger('alloc').debug(f'self.allocate_cell[{v2["name"]}]: K: {k} R: {v2["repeat_count"]}, cells: {[c.get("block_name") for c in v2["cells"]]}')
-            # logging.getLogger('alloc').debug(f'################################################################################################################################################')
-
-
         logging.getLogger('alloc').debug(f'####### 할당셀 완료 #######')
 
-        for a, v in self.allocate_cell.items():
-            for b, v2 in v.items():
+        for _, v in self.allocate_cell.items():
+            for _, v2 in v.items():
                 v2['cells'] = Block.sort_cells(v2['cells'])
                 self.allocate_cell_names.extend(Block.get_block_names(v2["cells"]))
                 logging.getLogger('alloc').debug(f'self.allocate_cell[{v2["name"]}]: R: {v2["repeat_count"]}, cells: {[c.get("block_name") for c in v2["cells"]]}')
         logging.getLogger('alloc').debug(f'##########################')
-        return self.allocate_cell, self.allocate_cell_names, self.outline(s_num, obstacle_cells, start_line)
+        return self.allocate_cell, self.allocate_cell_names, self.outline(obstacle_cells, start_line)
 
     # 할당셀 외단라인 작업
-    def outline(self, s_num: float, obstacle_cells: list, start_line: int):
+    @log_decorator('할당셀 외단라인 알고리즘')
+    def outline(self, obstacle_cells: list, start_line: int):
         left_outer_cells, right_outer_cells = [], []
         
-        # 2번 유형의 셀(진입 불가이면서 절성토량 존재, 이동 가능(Y) 셀)들과 진입 가능이며 할당되지 않았으며 이동 가능(Y)한 셀 중 2번 유형 셀과 맞닿은 셀들에 대해서 
+        # 2번 유형의 셀(진입 불가이면서 절성토량 존재, 이동 가능(N) 셀)들과 진입 가능이며 할당되지 않았으며 이동 가능(Y)한 셀 중 2번 유형 셀과 맞닿은 셀들에 대해서 
         # 좌측 외단라인에 대한 셀이면 left_outer_cells에 해당 셀 저장
         # 우측 외단라인에 대한 셀이면 right_outer_cells에 해당 셀 저장 
         # * 2번 유형셀: 진입 불가이면서 절성토량 존재, 이동 가능(Y) 셀
         # * 진입 가능 조건: 기준 셀이 BL_i_j라고 했을 때 BL_i_j-1 과 BL_i_j-2 가 이동 가능(Y) 셀이다 (j-1 혹은 j-2가 1보다 작다면 이동 불가(N)으로 취급)
         # * 맞닿은 셀 조건: 기준 셀이 BL_i_j라고 했을 때 BL_i-1_j 과 BL_i+1_j이 맞 닿은셀이다.
         # * ceil(M(최대열번호) / 2) 보다 열번호가 작거나 같을 경우 left_outer_cells, 클경우 right_outer_cells로 저장
-        case_1_cells, case_2_cells = {}, {}
+        case_1_cells, case_2_cells = Block.get_cell_1_2(self.block_items, self.allocate_cell_names, obstacle_cells)
 
-        for j, _v in self.block_items.items():
-            for i, block in _v.items():
-                # 할당된 셀이거나 절성토량이 없을 경우 skip
-                block_name = block.get('block_name')
-                if block_name in set(self.allocate_cell_names) or abs(block.get('total_vol'))  == 0:
-                    continue
-
-                # 접근 가능이면 case_1_cells에 추가, 아닐 경우 case_2_cells에 추가
-                if Block.check_accessible(block, self.block_items, s_num, obstacle_cells):
-                    case_1_cells[block_name] = block
-                else:
-                    case_2_cells[block_name] = block
-
-        # 2번 유형의 셀과 1번유형의 셀 중 2번유형과 맞닿은셀 추출
-        for block_name, block in case_2_cells.items():
+        # case_1_cells 셀 중 2번유형과 맞닿은셀 추출
+        for block in case_2_cells.values():
             # block_i: 열, block_j: 행
             block_i, block_j = Block.get_bl_i_j(block)
-
-            # ------------------ 과기대 수정 ----------------------------
-            # 열 번호가 start_line보다 작은 경우 left_outer_cells와 right_outer_cells에서 해당 셀을 제거
-            if block_j < start_line:
-                if block in left_outer_cells:
-                    left_outer_cells.remove(block)
-                if block in right_outer_cells:
-                    right_outer_cells.remove(block)
-                continue
-            # ------------------ 과기대 수정 ----------------------------
             if math.ceil(self.M / 2) > block_i:
                 left_outer_cells.append(block) 
             else:
@@ -300,8 +339,11 @@ class DozerAlloc():
                 else:
                     right_outer_cells.append(case_1_cells[f'BL_{block_i + 1}_{block_j}'])
 
-        left_outer_cells, right_outer_cells = Block.sort_cells(left_outer_cells), Block.sort_cells(right_outer_cells)
-
+        # v1.1.0 열 번호가 start_line보다 작은 경우 left_outer_cells와 right_outer_cells에서 해당 셀을 제거
+        # left_outer_cells, right_outer_cells = Block.sort_cells(left_outer_cells), Block.sort_cells(right_outer_cells)
+        left_outer_cells = Block.sort_cells([cell for cell in left_outer_cells if list(Block.get_bl_i_j(cell))[1] >= start_line])
+        right_outer_cells = Block.sort_cells([cell for cell in right_outer_cells if list(Block.get_bl_i_j(cell))[1] >= start_line])
+        
         logging.getLogger('alloc').debug(f'left_outer_cells: {Block.get_block_names(left_outer_cells)}')
         logging.getLogger('alloc').debug(f'right_outer_cells: {Block.get_block_names(right_outer_cells)}')
 
@@ -386,3 +428,26 @@ class DozerAlloc():
             logging.getLogger('alloc').debug(f'OL_2_{j}: {[block.get("block_name") for block in self.outline_cell[2][j]]}')
 
         return self.outline_cell
+
+    def get_start_line(self, tmp_start_line: int, distances: list, required_line_change_distance: int, equipment_length: int):
+        cumulative_distance = 0
+        for num in range(len(distances)):
+            cumulative_distance += distances[num]
+            logging.getLogger('alloc').debug(f'num: {num}, distances[num]: {distances[num]}, cumulative_distance: {cumulative_distance}')
+            if cumulative_distance >= equipment_length:
+                logging.getLogger('alloc').debug(f'cumulative_distance({cumulative_distance}) > equipment_length({equipment_length})')
+                break
+        
+        cumulative_distance = 0
+        for num in range(num + 1, len(distances)):
+            cumulative_distance += distances[num]
+            logging.getLogger('alloc').debug(f'num: {num}, distances[num]: {distances[num]}, cumulative_distance: {cumulative_distance}')
+            if cumulative_distance >= required_line_change_distance:
+                logging.getLogger('alloc').debug(f'cumulative_distance({cumulative_distance}) > required_line_change_distance({required_line_change_distance})')
+                break
+        
+        min_start_line = num + 1
+
+        return min_start_line + 1 if tmp_start_line <= min_start_line else tmp_start_line
+            
+            
