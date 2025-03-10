@@ -1,5 +1,5 @@
 #!/bin/bash
-source /home/ubuntu/miniconda3/etc/profile.d/conda.sh
+source /opt/conda/etc/profile.d/conda.sh
 conda activate routev2
 input_file=${1}
 output_file=${2}
