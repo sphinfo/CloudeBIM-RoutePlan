@@ -9,6 +9,7 @@ parser.add_argument('--Blade_Capacity', type=float, required=True, help='블레�
 parser.add_argument('--Blade_Width', type=float, required=True, help='블레이드 폭')
 parser.add_argument('--Equipment_Width', type=float, required=True, help='장비 폭')
 parser.add_argument('--needed_dist', type=float, required=False, default=2.5, help='라인변경에 필요한 거리(상수 변경예정)')
+parser.add_argument('--required_line_change_distance', type=float, required=False, default='2.5', help='라인변경에 필요한 거리')
 parser.add_argument('--Repeated_rate', type=float, required=False, help='중복도')
 parser.add_argument('--Starting_Direction', type=str, required=False, help='작업 시작 방향')
 parser.add_argument('--Starting_Point', type=str, required=False, help='작업 진행 방향')
@@ -18,7 +19,6 @@ parser.add_argument('--Obstacle_Cell', type=str, required=False, help='장애물
 parser.add_argument('--Start_Line', type=int, required=True, help='시작라인')
 
 # v1.1.0
-parser.add_argument('--required_line_change_distance', type=float, required=True, default='-', help='라인변경에 필요한 거리')
 parser.add_argument('--equipment_length', type=float, required=True, help='장비 길이')
 parser.add_argument('--equipment', type=str, required=False,  default='dozer', choices=['dozer', 'grader'], help='장비 종류,')
 parser.add_argument('--end_line', type=int, required=False, help='종료 라인')
