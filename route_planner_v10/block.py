@@ -39,13 +39,13 @@ class Block(object):
         return sorted(cells, key=lambda x: (list(Block.get_bl_i_j(x))[1], list(Block.get_bl_i_j(x))[0]))
 
     @staticmethod
-    def get_bl(cell_data: list, end_line: int):
+    def get_bl(cell_data: list, end_line: int, front_cells: int):
         blocks = {}
         # RENAME_MAP = {'BLName': 'block_name', 'XTcoord': 'x_t', 'YTcoord': 'y_t', 'ZTcoord': 'z_t', 'XBcoord': 'x_b', 'YBcoord': 'y_b', 'ZBcoord': 'z_b', 'cutVol': 'cut_vol', 'fillVol': 'fill_vol', 'totalVol': 'total_vol', 'Y,N': 'yn'}
         RENAME_MAP = {'BLName': 'block_name', 'XTcoord': 'x_t', 'YTcoord': 'y_t', 'ZTcoord': 'z_t', 'XBcoord': 'x_b', 'YBcoord': 'y_b', 'ZBcoord': 'z_b', 'cutVol': 'cut_vol', 'fillVol': 'fill_vol', 'totalVol': 'total_vol', 'YN': 'yn',
                       'X1coord': 'x1', 'X2coord': 'x2', 'X3coord': 'x3', 'X4coord': 'x4',
                       'Y1coord': 'y1', 'Y2coord': 'y2', 'Y3coord': 'y3', 'Y4coord': 'y4',}
-        overflow_end_line = []
+        # overflow_end_line = []
         for cell in cell_data:
             cell['totalVol'] = cell['fillVol']-cell['cutVol']
             block_name, yn = map(cell.get, ['BLName', 'YN'])
@@ -57,10 +57,10 @@ class Block(object):
             i, j = map(lambda x: int(block_name.split('_')[x]), [1, 2])
 
             # end_line({end_line})보다 행 번호가 큰 경우 정보 추가 하지 않음(셀 정보 삭제)
-            if end_line is not None:
-                if j > end_line :
-                    overflow_end_line.append(block_name)
-                    continue
+            # if end_line is not None:
+            #     if j > end_line :
+            #         overflow_end_line.append(block_name)
+            #         continue
 
             blocks.setdefault(j, {})[i] = {RENAME_MAP[k]: float('0' if (v == '-' or v is None) else Block.valid_float(k, v)) if k in ['cutVol', 'fillVol', 'totalVol'] else v for k, v in cell.items() if k in RENAME_MAP}
 
@@ -70,8 +70,15 @@ class Block(object):
                     if not _v:
                         raise InputDataError(f'Required value, k: {_k}: {_v}')
                     Block.valid_float(_k, _v)
-
-        logging.getLogger('block').info(f'end_line({end_line})보다 행 번호가 큰 셀 정보 삭제 -> {overflow_end_line}')
+        
+        n, _ = Block.get_n_m(blocks)
+        _end_line = n if end_line is None else end_line
+        _end_line -= front_cells
+        logging.getLogger('block').info(f'v1.3.0 end_line: {_end_line}, 최대행: {n}, 입력된 end_line({end_line}), front_cells: {front_cells}')
+        for _n in list(blocks.keys()):
+            if _n > _end_line:
+                logging.getLogger('block').info(f'v1.3.0 end_line({_end_line})보다 행 번호가 큰 행({_n}) 삭제 -> {blocks[_n]}')
+                del blocks[_n]
         return blocks
     
     @staticmethod
@@ -144,18 +151,31 @@ class Block(object):
             e, s, h, l, obstacle_cells, blade_width, equipment_width,
             start_line, required_line_change_distance, equipment_length,
             equipment, end_line, safety_line_df1, safety_line_df2,
-            turning_radius, repeated_rate
+            turning_radius, repeated_rate, grader_front_length, grader_rear_length
         ) = map(
             args.get, ['Blade_Capacity', 'Min_Fwdist', 'needed_dist', 'Min_Cendist', 'Obstacle_Cell',
                            'Blade_Width', 'Equipment_Width', 'Start_Line', 'required_line_change_distance',
                            'equipment_length', 'equipment', 'end_line', 'safety_line_df1', 'safety_line_df2',
-                           'turning_radius', 'Repeated_rate']) 
+                           'turning_radius', 'Repeated_rate', 'grader_front_length', 'grader_rear_length']) 
+
+        # v1.3.0
+        cell_size = (1 - repeated_rate) * blade_width
 
         if equipment == 'grader':
-            for _k, _p in [('turning_radius', turning_radius), ('Repeated_rate', repeated_rate)]:
+            # for _k, _p in [('turning_radius', turning_radius), ('Repeated_rate', repeated_rate), ('grader_front_length', grader_front_length), ('grader_rear_length', grader_rear_length)]:
+            for _k, _p in [('turning_radius', turning_radius), ('grader_front_length', grader_front_length), ('grader_rear_length', grader_rear_length)]:
                 if _p is None:
                     logging.getLogger('block').error(f'Required value when grader, k: {_k}: {_p}')            
                     raise InputDataError(f'Required value, k: {_k}: {_p}')
+            # v1.1.0 그레이더 일 경우 라인변경에 필요한 거리 다시 계산
+            logging.getLogger('block').debug(f'required_line_change_distance: {required_line_change_distance} -> {turning_radius * 1.3 * (1 - repeated_rate) / 7.5 * 10}')
+            required_line_change_distance = turning_radius * 1.3 * (1 - repeated_rate) / 7.5 * 10
+
+            # v1.3.0
+            front_cells = math.ceil(grader_front_length / cell_size)
+            back_cells  = math.ceil(grader_rear_length  / cell_size)
+        else:
+            front_cells = back_cells = 0
 
         l = l if l else calculate_min_dist_center_node(model_line_data)
 
@@ -213,8 +233,11 @@ class Block(object):
             'repeated_rate': repeated_rate,
             'h_num': h_num,
             's_num': s_num,
-            'gap': gap
-        }, Block.get_bl(cell_data, end_line), outline_data
+            'gap': gap,
+            'cell_size': cell_size,
+            'front_cells': front_cells,
+            'back_cells': back_cells,
+        }, Block.get_bl(cell_data, end_line, front_cells), outline_data
 
 
     # point: (x, y, z)
