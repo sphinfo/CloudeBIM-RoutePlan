@@ -26,8 +26,8 @@ if LOGGING_FLAG:
     MSG_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
     DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
     makedirs(LOGGING_PATH, exist_ok=True)
-    makedirs(f'{LOGGING_PATH}/{file_name(args.get("input_path"))}', exist_ok=True)
-    file_handler = logging.FileHandler(filename=f'{LOGGING_PATH}/{file_name(args.get("input_path"))}/{args.get("execute_type")}_{datetime.now().strftime("%Y%m%d%H%M%S")}.log', encoding='utf-8')
+    makedirs(f'{LOGGING_PATH}/{file_name(args.get("output_file"))}', exist_ok=True)
+    file_handler = logging.FileHandler(filename=f'{LOGGING_PATH}/{file_name(args.get("output_file"))}/{datetime.now().strftime("%Y%m%d%H%M%S")}.log', encoding='utf-8')
     file_handler.setFormatter(logging.Formatter(fmt=MSG_FORMAT, datefmt=DATETIME_FORMAT))
     logger = logging.getLogger()
     logger.setLevel(LOGGING_MAP.get(LOGGING_LEVEL))
