@@ -9,9 +9,9 @@ from shapely import BufferCapStyle # type: ignore
 from shapely.geometry import LineString, Polygon # type: ignore
 
 from route_planner_v10.block import Block
-from route_planner_v10.util import log_decorator, calculate_h_num
+from route_planner_v10.util import log_decorator, calculate_h_num, dist_node
 from route_planner_v10.constants import SHOW_ALLOC_CELL_FLAG
-from route_planner_v10.exception import InputDataError
+from route_planner_v10.exception import InputDataError, RouteCreationError
 
 
 class DozerRoutePlan:
@@ -31,6 +31,11 @@ class DozerRoutePlan:
         # M: 전체 셀데이터 열번호 중 최고값, N: 할당셀 행번호 중 최고값
         self.N, self.M = max(allocate_cell.keys()), max(self.block_items[1].keys())
         self.timeline = 0
+
+        # v1.3.0
+        self.cell_size = None
+        self.safety_line_df1 = None
+        self.safety_line_df2 = None
 
     def add_route(self, coord: dict, allocate_cell_name: str, cell_name: str):
         coord.update({'allocate_cell_name': allocate_cell_name, 'cell_name': cell_name})
@@ -100,21 +105,31 @@ class DozerRoutePlan:
     def calc_route_plan(self, param: dict):
         (
             e, s, h, l, obstacle_cells, h_num, s_num, gap,
-            required_line_change_distance,
+            required_line_change_distance, cell_size,
             distances, safety_line_df1, safety_line_df2
         )  = map(
             param.get, ['e', 's', 'h', 'l', 'obstacle_cells', 'h_num', 's_num', 'gap',
-                        'required_line_change_distance',
+                        'required_line_change_distance', 'cell_size',
                         'distances', 'safety_line_df1', 'safety_line_df2'])
         
         self.e = e
         self.gap = gap
+        self.cell_size = cell_size
+        self.safety_line_df1 = safety_line_df1
+        self.safety_line_df2 = safety_line_df2
 
         logging.getLogger('plan').debug(f'불도저 버켓용량(e): {e}, 최소전진거리(s): {s}, 라인변경에 필요한 거리(h): {h}, 중심선 노드간 최소거리(l): {l}')
         logging.getLogger('plan').debug(f'장애물셀: {obstacle_cells}, gap: {gap}')
         logging.getLogger('plan').debug(f'라인변경에 필요한 셀 칸수 산정(H_num): {h_num}, 최소 할당하는셀의 개수 산정(S_num): {s_num}')
         logging.getLogger('plan').debug(f'최대 할당셀 열 번호 M = {self.M}, 최대 할당셀 행 번호 N = {self.N}')
 
+        # v1.3.0 사전 조건 확인
+        gap_1 = self.gap + safety_line_df1
+        gap_2 = self.gap + safety_line_df2
+        if max(gap_1, gap_2) >= cell_size * 3 / 2 and self.M <= 3:
+            logging.getLogger('plan').error(f'v1.3.0 Unable to route creation due to `max(gap_1({gap_1}), gap_2({gap_2})) >= cell_size({cell_size}) * 3 / 2` and `M({self.M}) <= 3` conditions')
+            raise RouteCreationError(f'v1.3.0 Unable to route creation due to `max(gap_1({gap_1}), gap_2({gap_2})) >= cell_size({cell_size}) * 3 / 2` and `M({self.M}) <= 3` conditions')
+        
         first_j = next(iter(self.allocate_cell))
         first_i = next(iter(self.allocate_cell[first_j]))
 
@@ -160,6 +175,8 @@ class DozerRoutePlan:
                 if i_next != i_cur or j_next != j_cur:
                     # v1.1.0
                     h_num = calculate_h_num(j_cur, required_line_change_distance, distances)
+                    logging.getLogger('plan').debug(f'j_cur: {j_cur}, h_num: {h_num}, required_line_change_distance: {required_line_change_distance}, distances: {distances}')
+
                     j_next -= 1
 
                     # v1.1.0 직전 경로가 외단라인 경로인가?
@@ -267,28 +284,54 @@ class DozerRoutePlan:
                     logging.getLogger('plan').debug(f'반복횟수[R({repeat_count})] 만족했는가? current r: {r}, {not (repeat_count > r)}')
 
                 i_cur, j_cur = i_next, j_max
-                # AL_i_j가 해당 행의 할당셀들 중 첫 번째로 경로 생성이 되는 할당셀 인가?
-                logging.getLogger('plan').debug(f'할당셀(AL_{i}_{j})가 해당 행의 할당셀들 중 첫 번째로 경로 생성이 되는 할당셀 인가? {alloc_is_first}')
-                if alloc_is_first:
-                    alloc_is_first = False
-                    if j % 2 == 1:
-                        if self.allocate_outline_cell.get(1, {}).get(j):
-                            logging.getLogger('plan').debug(f'OL_1_{j} 작업')
-                            j_cur = self.outline(j, self.allocate_outline_cell[1][j], self.outline_data['df_l'], self.outline_data['df_r'], i_cur, j_cur, 'df1', distances, required_line_change_distance, safety_line_df1)
-                            bf_i_cur = i_cur
-                            i_cur += 1 * pow(-1, j)
-                            logging.getLogger('plan').debug(f'i_cur+=1*(-1)^j({j}) -> i_cur: {i_cur} bf_i_cur: {bf_i_cur}')
-                        else:
-                            logging.getLogger('plan').debug(f'OL_1_{j} 작업 - Skip')
+
+                # v1.3.0
+                # 열이 2개만 있을 경우 비효율적으로 후진하는 상황 방지.
+                # M == 2 인 경우  경로 생성 알고리즘 추가  (일반 셀로 할당 후 일반 경로로 셀 생성)
+                logging.getLogger('plan').debug(f'M == 2? : {self.M == 2}')
+                if self.M == 2:
+                    # AL_i_j가 해당 행의 할당셀들 중 첫 번째로 경로 생성이 되는 할당셀 인가?
+                    logging.getLogger('plan').debug(f'v1.3.0 할당셀(AL_{i}_{j})가 해당 행의 할당셀들 중 첫 번째로 경로 생성이 되는 할당셀 인가? {alloc_is_first}')
+                    if alloc_is_first:
+                        alloc_is_first = False
                     else:
-                        if self.allocate_outline_cell.get(2, {}).get(j):
-                            logging.getLogger('plan').debug(f'OL_2_{j} 작업')
-                            j_cur = self.outline(j, self.allocate_outline_cell[2][j], self.outline_data['df_r'], self.outline_data['df_l'], i_cur, j_cur, 'df2', distances, required_line_change_distance, safety_line_df2)
-                            bf_i_cur = i_cur
-                            i_cur += 1 * pow(-1, j)
-                            logging.getLogger('plan').debug(f'i_cur+=1*(-1)^j({j}) -> i_cur: {i_cur} before i_cur: {bf_i_cur}')
+                        for _ in range(j, self.N):
+                            j += 1
+                            # 현재 할당셀(AL_i_j)에 할당된 셀이 존재하는가? 
+                            logging.getLogger('plan').debug(f'v1.3.0 현재 할당셀(AL_{i}_{j})에 할당된 셀이 존재하는가? {self.allocate_cell.get(j, {}).get(i) is not None}')
+                            if len(self.allocate_cell.get(j, {}).get(i, {}).get('cells', [])) > 0:
+                                # j_max= AL_i_j 에서 행번호가 가장 높은 값
+                                j_max = list(Block.get_bl_i_j(self.allocate_cell.get(j, {}).get(i, {}).get('cells')[-1]))[1]
+                                logging.getLogger('plan').debug(f'v1.3.0 j_max({j_max})= AL_i({i})_j({j}) 에서 행번호가 가장 높은 값')
+                                # BL_(i_cur)_(j_max)의 전방 이동점까지 전진 경로 생성
+                                logging.getLogger('plan').debug(f'v1.3.0 BL_({i_cur})_({j_max})의 전방 이동점 까지 전진경로 생성')
+                                for block in self.allocate_cell[j][i]['cells']:
+                                    self.add_route_plan(block=block, forward=True, allocate_cell_name=f'AL_{i}_{j}', cell_name=f'{block.get("block_name")}')
+                                j_cur = j_max
+                                break
+                else: 
+                    # AL_i_j가 해당 행의 할당셀들 중 첫 번째로 경로 생성이 되는 할당셀 인가?
+                    logging.getLogger('plan').debug(f'할당셀(AL_{i}_{j})가 해당 행의 할당셀들 중 첫 번째로 경로 생성이 되는 할당셀 인가? {alloc_is_first}')
+                    if alloc_is_first:
+                        alloc_is_first = False
+                        if j % 2 == 1:
+                            if self.allocate_outline_cell.get(1, {}).get(j):
+                                logging.getLogger('plan').debug(f'OL_1_{j} 작업')
+                                j_cur = self.outline(j, self.allocate_outline_cell[1][j], self.outline_data['df_l'], self.outline_data['df_r'], i_cur, j_cur, 'df1', distances, required_line_change_distance, safety_line_df1)
+                                bf_i_cur = i_cur
+                                i_cur += 1 * pow(-1, j)
+                                logging.getLogger('plan').debug(f'i_cur+=1*(-1)^j({j}) -> i_cur: {i_cur} bf_i_cur: {bf_i_cur}')
+                            else:
+                                logging.getLogger('plan').debug(f'OL_1_{j} 작업 - Skip')
                         else:
-                            logging.getLogger('plan').debug(f'OL_2_{j} 작업 - Skip')
+                            if self.allocate_outline_cell.get(2, {}).get(j):
+                                logging.getLogger('plan').debug(f'OL_2_{j} 작업')
+                                j_cur = self.outline(j, self.allocate_outline_cell[2][j], self.outline_data['df_r'], self.outline_data['df_l'], i_cur, j_cur, 'df2', distances, required_line_change_distance, safety_line_df2)
+                                bf_i_cur = i_cur
+                                i_cur += 1 * pow(-1, j)
+                                logging.getLogger('plan').debug(f'i_cur+=1*(-1)^j({j}) -> i_cur: {i_cur} before i_cur: {bf_i_cur}')
+                            else:
+                                logging.getLogger('plan').debug(f'OL_2_{j} 작업 - Skip')
             # j%2==1
             if j % 2 == 1:
                 if self.allocate_outline_cell.get(2, {}).get(j):
@@ -369,11 +412,48 @@ class DozerRoutePlan:
         line_num1 = 1 if df_name == 'df1' else 2
         line_num2 = 2 if line_num1 == 1 else 1
 
+        #v1.3.0
+        gap_1 = self.gap + self.safety_line_df1
+        gap_2 = self.gap + self.safety_line_df2
+        gap_cells_1 = math.ceil(gap_1 / self.cell_size)
+        gap_cells_2 = math.ceil(gap_2 / self.cell_size)
+
+        j_min_block = sorted(alloc_outline_data, key=lambda x: list(Block.get_bl_i_j(x))[1])[0]
+
         # j_min = OL_2_j의 셀 중 가장 행 번호가 낮은 셀의 행 번호, j_max = OL_2_j의 셀 중 가장 행 번호가 높은 셀의 행 번호 
         j_items = [list(Block.get_bl_i_j(block))[1] for block in alloc_outline_data]
         j_min, j_max = min(j_items), max(j_items)
+
+        self.block_items[j_min][i_cur]
+
+        invalid = True
+        # 좌측외단라인 작업인가?
+        logging.getLogger('plan').debug(f'v1.3.0 좌측외단라인 작업인가? {df_name == "df1"}')
+        if df_name == 'df1':
+            for _i_cur in range(i_cur, self.M + 1):
+                # gap_1 <  좌측외단라인블록의 (X1coord,Y1coord)부터 i값 블록의 (X1coord,Y1coord)까지의 거리 ?
+                distance = dist_node(node={'x': j_min_block['x1'], 'y': j_min_block['y1']}, next_node={'x': self.block_items[j_min][_i_cur]['x1'], 'y': self.block_items[j_min][_i_cur]['y1']})
+                logging.getLogger('plan').debug(f'v1.3.0 {gap_1 < distance} gap_1({gap_1}) < ({distance}) 좌측외단라인블록({j_min_block["block_name"]}) (X1coord({j_min_block["x1"]}),Y1coord({j_min_block["y1"]})) 부터 i값({_i_cur}) 블록({self.block_items[j_min][_i_cur]["block_name"]})의 (X1coord({self.block_items[j_min][_i_cur]["x1"]}),Y1coord({self.block_items[j_min][_i_cur]["y1"]}))까지의 거리({distance})')
+                if gap_1 < distance:
+                    break
+                else:
+                    if _i_cur == self.M:
+                        raise RouteCreationError(f'v1.3.0 Outline Error Occurred, {gap_1 < distance} gap_1({gap_1}) < ({distance}) 좌측외단라인블록({j_min_block["block_name"]}) (X1coord({j_min_block["x1"]}),Y1coord({j_min_block["y1"]})) 부터 i값({_i_cur}) 블록({self.block_items[j_min][_i_cur]["block_name"]})의 (X1coord({self.block_items[j_min][_i_cur]["x1"]}),Y1coord({self.block_items[j_min][_i_cur]["y1"]}))까지의 거리({distance})')
+        else:
+            for _i_cur in range(i_cur, 0, -1):
+                # gap_2 <  우측외단라인블록의 (X2coord,Y2coord)부터 i값 블록의(X2coord, Y2coord)까지의 거리?
+                distance = dist_node(node={'x': j_min_block['x2'], 'y': j_min_block['y2']}, next_node={'x': self.block_items[j_min][_i_cur]['x2'], 'y': self.block_items[j_min][_i_cur]['y2']})
+                logging.getLogger('plan').debug(f'v1.3.0 {gap_2 < distance} gap_2({gap_2}) < ({distance}) 좌측외단라인블록({j_min_block["block_name"]}) (X2coord({j_min_block["x2"]}),Y2coord({j_min_block["y2"]})) 부터 i값({_i_cur}) 블록({self.block_items[j_min][_i_cur]["block_name"]})의 (X2coord({self.block_items[j_min][_i_cur]["x2"]}),Y2coord({self.block_items[j_min][_i_cur]["y2"]}))까지의 거리({distance})')
+                if gap_2 < distance:
+                    break
+                else:
+                    if _i_cur == 1:
+                        raise RouteCreationError(f'v1.3.0 Outline Error Occurred, {gap_2 < distance} gap_2({gap_2}) < ({distance}) 좌측외단라인블록({j_min_block["block_name"]}) (X2coord({j_min_block["x2"]}),Y2coord({j_min_block["y2"]})) 부터 i값({_i_cur}) 블록({self.block_items[j_min][_i_cur]["block_name"]})의 (X2coord({self.block_items[j_min][_i_cur]["x2"]}),Y2coord({self.block_items[j_min][_i_cur]["y2"]}))까지의 거리({distance})')
+
         # v1.1.0 
         h_num = calculate_h_num(j_min, required_line_change_distance, distances)
+        logging.getLogger('plan').debug(f'outline j_min: {j_cur}, h_num: {h_num}, required_line_change_distance: {required_line_change_distance}, distances: {distances}')
+
         j_min -= 1
         
         repeat_count = Block.get_repeat_count(alloc_outline_data, self.e)
