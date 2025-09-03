@@ -3,7 +3,7 @@ import numpy as np
 import math
 import csv
 import os
-from shapely.geometry import Polygon, LineString, Point
+from shapely.geometry import Polygon, LineString, Point, MultiPoint, GeometryCollection, MultiLineString
 from shapely.ops import split
 import matplotlib.pyplot as plt
 import argparse
@@ -245,10 +245,8 @@ def create_grid_cells_from_midpoint(df1, df2, cell_size, df0=None, basename='', 
         return []
     
     # AB 선분이 바닥(y값이 작은 쪽)에 있도록 확인
-    # df1, df2의 첫 번째 점들(AB 근처)이 y_rot에서 작은 값을 가져야 함
     ab_point_rot = rotation_matrix @ (np.array([df1.iloc[0]['x'], df1.iloc[0]['y']]) - midpoint)
     ab_line_rot_y = ab_point_rot[1]
-    
     print(f"AB 라인의 회전된 Y 좌표: {ab_line_rot_y:.2f}")
     
     # y_idx 기준으로 정렬하여 가로줄 그룹 만들기 (AB가 바닥이므로 작은 y부터)
@@ -267,7 +265,6 @@ def create_grid_cells_from_midpoint(df1, df2, cell_size, df0=None, basename='', 
     
     # y_idx 기준으로 정렬 (작은 값부터 = AB쪽부터)
     sorted_y_indices = sorted(rows.keys())
-    
     print(f"Y 인덱스 범위: {min(sorted_y_indices)} ~ {max(sorted_y_indices)}")
     
     # 세로줄별로 처리
@@ -306,44 +303,268 @@ def find_intersecting_cells(grid_cells, line):
     return intersecting
 
 
+# ====== 보조 유틸: 교차점 추출/정렬/중복제거/시계방향 교정 ======
+
+def _extract_points(geom):
+    """Shapely 교차 결과에서 Point만 뽑아 리스트로 반환"""
+    if geom.is_empty:
+        return []
+    if isinstance(geom, Point):
+        return [geom]
+    if isinstance(geom, MultiPoint):
+        return list(geom.geoms)
+    if isinstance(geom, LineString):
+        coords = list(geom.coords)
+        if len(coords) >= 2:
+            return [Point(coords[0]), Point(coords[-1])]
+        return []
+    if isinstance(geom, MultiLineString):
+        pts = []
+        for g in geom.geoms:
+            pts.extend(_extract_points(g))
+        return pts
+    if isinstance(geom, GeometryCollection):
+        pts = []
+        for g in geom.geoms:
+            pts.extend(_extract_points(g))
+        return pts
+    return []
+
+
+def _dedupe_xy(points, ndigits=6):
+    """좌표 중복 제거 (라운딩 기반)"""
+    seen = set()
+    out = []
+    for x, y in points:
+        key = (round(x, ndigits), round(y, ndigits))
+        if key not in seen:
+            seen.add(key)
+            out.append((x, y))
+    return out
+
+
+def _order_ccw(points):
+    """점들을 중심각(atan2) 기준으로 CCW 정렬"""
+    cx = sum(p[0] for p in points) / len(points)
+    cy = sum(p[1] for p in points) / len(points)
+    return sorted(points, key=lambda p: math.atan2(p[1] - cy, p[0] - cx))
+
+
+def _polygon_area_signed(points):
+    s = 0.0
+    n = len(points)
+    for i in range(n):
+        x1, y1 = points[i]
+        x2, y2 = points[(i + 1) % n]
+        s += x1 * y2 - x2 * y1
+    return 0.5 * s
+
+
+def _bottom_left_index_by_AB(points, midpoint_info=None):
+    """AB 기준 지역좌표계에서 좌하단 점의 인덱스를 찾음"""
+    eps = 1e-9
+    if midpoint_info is not None and len(midpoint_info) > 0:
+        A = np.array([midpoint_info.iloc[0]['A_x'], midpoint_info.iloc[0]['A_y']])
+        B = np.array([midpoint_info.iloc[0]['B_x'], midpoint_info.iloc[0]['B_y']])
+        O = (A + B) / 2.0
+        theta = math.atan2(B[1] - A[1], B[0] - A[0])
+        c, s = math.cos(-theta), math.sin(-theta)
+        R = np.array([[c, -s], [s, c]])
+        rot = [R @ (np.array(p) - O) for p in points]
+    else:
+        rot = [np.array(p) for p in points]
+    
+    # x 최소, x 동률이면 y 최소
+    xy = [(i, rp[0], rp[1]) for i, rp in enumerate(rot)]
+    xy.sort(key=lambda t: (round(t[1], 8), round(t[2], 8)))
+    return xy[0][0]
+
+
+def _reindex_start_bottom_left_ccw(points, midpoint_info=None):
+    """좌하단부터 시작하고 CCW가 되도록 재인덱싱"""
+    if len(points) < 3:
+        return points
+    pts = _order_ccw(points)
+    if _polygon_area_signed(pts) < 0:  # 시계방향이면 뒤집기
+        pts = pts[:1] + list(reversed(pts[1:]))
+    bl_idx = _bottom_left_index_by_AB(pts, midpoint_info)
+    return pts[bl_idx:] + pts[:bl_idx]
+
+
+def _internal_angle_deg(a, b, c):
+    v1 = np.array([a[0] - b[0], a[1] - b[1]])
+    v2 = np.array([c[0] - b[0], c[1] - b[1]])
+    n1 = np.linalg.norm(v1); n2 = np.linalg.norm(v2)
+    if n1 < 1e-12 or n2 < 1e-12:
+        return 180.0
+    cosang = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
+    return math.degrees(math.acos(cosang))
+
+
+def _cap_vertices_to_five(points, max_vertices=5):
+    """거의 일직선인 꼭짓점을 우선 제거하여 최대 5점으로 제한"""
+    P = points[:]
+    if len(P) <= max_vertices:
+        return P
+
+    def prev_i(i, n): return (i - 1) % n
+    def next_i(i, n): return (i + 1) % n
+
+    while len(P) > max_vertices:
+        n = len(P)
+        angles = []
+        for i in range(n):
+            a = P[prev_i(i, n)]; b = P[i]; c = P[next_i(i, n)]
+            angles.append((i, abs(180.0 - _internal_angle_deg(a, b, c))))
+        # 180°와 차이가 가장 작은(= 가장 평평한) 점부터 제거 시도
+        angles.sort(key=lambda t: t[1])
+        removed = False
+        for i, _ in angles:
+            cand = P[:i] + P[i+1:]
+            poly = Polygon(cand)
+            if isinstance(poly, Polygon) and (not poly.is_empty) and poly.is_valid:
+                P = cand
+                removed = True
+                break
+        if not removed:
+            break
+    return P
+
+
+def _clip_cell_minimal(cell_vertices, df_lines, boundary_polygon, midpoint_info=None, eps=1e-9, cap_to_five=True):
+    """
+    원래 사각형 꼭짓점 중 내부/경계 위 점 + 각 변과 df1/df2 교차점만 사용해 다각형 구성.
+    반환되는 좌표는 좌하단부터 CCW.
+    """
+    rect = Polygon(cell_vertices)
+
+    # 완전 내부 → 원형 유지(정렬만 보정)
+    if boundary_polygon.contains(rect):
+        ordered = _reindex_start_bottom_left_ccw(list(rect.exterior.coords)[:-1], midpoint_info)
+        return Polygon(ordered)
+
+    # 완전 외부 → 없음
+    if not rect.intersects(boundary_polygon):
+        return None
+
+    # 1) 원래 사각형 꼭짓점 중 내부/경계 점 유지
+    pts = []
+    buf = boundary_polygon.buffer(eps)
+    for (x, y) in rect.exterior.coords[:-1]:
+        p = Point(x, y)
+        if buf.covers(p):
+            pts.append((x, y))
+
+    # 2) 각 변과 df1/df2 교차점 추가
+    verts = list(rect.exterior.coords)[:-1]
+    for i in range(len(verts)):
+        a = verts[i]
+        b = verts[(i + 1) % len(verts)]
+        edge = LineString([a, b])
+        for df in df_lines:
+            # 경계선의 끝점들도 명시적으로 확인
+            df_coords = list(df.coords)
+            
+            # 끝점이 셀 변 위에 있는지 확인
+            for endpoint in [df_coords[0], df_coords[-1]]:  # A점, B점
+                pt = Point(endpoint)
+                if edge.distance(pt) < eps:  # 변 위에 있으면
+                    pts.append(endpoint)
+            
+            # 일반 교차점도 추가
+            inter = edge.intersection(df)
+            for q in _extract_points(inter):
+                pts.append((q.x, q.y))
+
+    # 3) 중복 제거 & 최소 점수 확인
+    pts = _dedupe_xy(pts, ndigits=6)
+    if len(pts) < 3:
+        res = rect.intersection(boundary_polygon)
+        if isinstance(res, Polygon) and not res.is_empty:
+            ordered = _reindex_start_bottom_left_ccw(list(res.exterior.coords)[:-1], midpoint_info)
+            return Polygon(ordered)
+        return None
+
+    # 4) CCW 정렬 + 좌하단 시작
+    ordered = _reindex_start_bottom_left_ccw(pts, midpoint_info)
+
+    # 5) 최대 5점 제한(옵션)
+    if cap_to_five and len(ordered) > 5:
+        ordered = _cap_vertices_to_five(ordered, max_vertices=5)
+        ordered = _reindex_start_bottom_left_ccw(ordered, midpoint_info)
+
+    poly = Polygon(ordered)
+    if (not poly.is_valid) or poly.is_empty:
+        poly = poly.buffer(0)
+    return poly if (isinstance(poly, Polygon) and not poly.is_empty) else None
+
+
+def simplify_polygon_by_angle(coords, angle_tolerance=5.0):
+    """
+    (이전 로직) 거의 일직선 구간 단순화 - 사용하지 않지만 보존
+    """
+    if len(coords) <= 3:
+        return coords
+    angle_threshold = np.radians(angle_tolerance)
+    simplified = []
+    i = 0
+    while i < len(coords):
+        simplified.append(coords[i])
+        if i >= len(coords) - 2:
+            i += 1
+            continue
+        j = i + 1
+        while j < len(coords) - 1:
+            if not is_nearly_straight(coords[i:j+2], angle_threshold):
+                break
+            j += 1
+        if j > i + 1:
+            i = j
+        else:
+            i += 1
+    if len(simplified) == 0 or simplified[-1] != coords[-1]:
+        simplified.append(coords[-1])
+    return simplified
+
+
+def is_nearly_straight(points, angle_threshold):
+    if len(points) < 3:
+        return True
+    start = np.array(points[0])
+    end = np.array(points[-1])
+    base_vector = end - start
+    base_length = np.linalg.norm(base_vector)
+    if base_length < 1e-10:
+        return False
+    base_unit = base_vector / base_length
+    for i in range(1, len(points) - 1):
+        point = np.array(points[i])
+        point_vector = point - start
+        projection = np.dot(point_vector, base_unit)
+        projected_point = start + projection * base_unit
+        distance = np.linalg.norm(point - projected_point)
+        if projection > 0 and projection < base_length:
+            angle_approx = np.arctan(distance / min(projection, base_length - projection))
+            if angle_approx > angle_threshold:
+                return False
+    return True
+
+
 def split_intersecting_cells(grid_cells, boundary_lines, boundary_polygon, midpoint_info=None):
-    """교차하는 셀 분할 및 필터링 - 좌표 재정렬 추가"""
-    # 경계선과 교차하는 셀 찾기
+    """교차하는 셀 분할 (최소 꼭짓점 방식) — 나머지 파이프라인/출력은 그대로 유지"""
+    # 경계선과 교차하는 셀 찾기 (기존 방식 유지)
     intersecting_cells = set()
     for line in boundary_lines:
         intersecting_cells.update(find_intersecting_cells(grid_cells, line))
     
-    # 분할 처리
     inside_polygons = {}
     for cell in grid_cells:
-        if cell['cell_name'] in intersecting_cells:
-            poly = Polygon(cell['vertices'])
-            
-            # 분할
-            result = [poly.intersection(boundary_polygon)]
-           
-            # 기존의 단순화 코드
-            coords = list(result[0].exterior.coords)
-            new_coords = [coords[0]]
-            for i in range(1, len(coords) - 1):
-                if LineString([coords[i - 1], coords[i + 1]]).distance(Point(coords[i])) > 1e-3:
-                    new_coords.append(coords[i])
-            new_coords.append(coords[-1])
-            
-            # ✨ 좌표 재정렬 추가
-            if midpoint_info is not None:
-                reordered_coords = reorder_polygon_vertices_to_bottom_left(
-                    Polygon(new_coords), midpoint_info
-                )
-                result = [Polygon(reordered_coords)]
-            else:
-                result = [Polygon(new_coords)]
-
-            # 내부 영역만 필터링
-            filtered = [p for p in result if p.intersection(boundary_polygon).area > p.area / 2]
-            if filtered:
-               inside_polygons[cell['cell_name']] = filtered
-    
+        name = cell['cell_name']
+        if name in intersecting_cells:
+            clipped = _clip_cell_minimal(cell['vertices'], boundary_lines, boundary_polygon, midpoint_info)
+            if clipped and clipped.area > 1e-10:
+                # 이미 _clip_cell_minimal에서 좌하단 시작 CCW로 정렬 완료
+                inside_polygons[name] = [clipped]
     return intersecting_cells, inside_polygons
 
 
@@ -351,17 +572,14 @@ def calculate_midpoints(coords):
     """사각형의 각 변 중점 계산"""
     if len(coords) != 4:
         return [""] * 8
-    
-    # 하단, 상단, 좌측, 우측 중점
     xb, yb = (coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2
     xt, yt = (coords[3][0] + coords[2][0]) / 2, (coords[3][1] + coords[2][1]) / 2
     xl, yl = (coords[0][0] + coords[3][0]) / 2, (coords[0][1] + coords[3][1]) / 2
     xr, yr = (coords[1][0] + coords[2][0]) / 2, (coords[1][1] + coords[2][1]) / 2
-    
     return [str(v) for v in [xb, yb, xt, yt, xl, yl, xr, yr]]
 
 
-def write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells, boundary_polygon, filename):
+def write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells, boundary_polygon, filename, midpoint_info=None):
     """셀 정보를 CSV로 저장"""
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     
@@ -381,26 +599,38 @@ def write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells, boundary
     rows = []
     idx = 1
     
-    # 모든 셀을 딕셔너리로 변환
+    # 모든 셀을 딕셔너리로 변환 (교차 셀은 inside_polygons가 대체)
     all_cells = {}
     for cell in grid_cells:
         all_cells[cell['cell_name']] = [Polygon(cell['vertices'])]
     all_cells.update(inside_polygons)
+
+    # 항상 LBL_i_j / RBL_i_j / BL_i_j의 숫자 기준으로 정렬 (1,2,3... 순)
+    def _parse_name(nm: str):
+        parts = nm.replace('LBL_', '').replace('RBL_', '').replace('BL_', '').split('_')
+        try:
+            if len(parts) >= 2:
+                return (int(parts[-2]), int(parts[-1]))
+        except Exception:
+            pass
+    
+        return (10**9, 10**9)
+
+    items_sorted = sorted(all_cells.items(), key=lambda kv: _parse_name(kv[0]))
     
     # CSV 작성
-    for bl_name, polygons in all_cells.items():
+    for bl_name, polygons in items_sorted:
         for poly in polygons:
             coords = list(poly.exterior.coords)[:-1]  # 마지막 중복점 제거
+            # 좌표를 좌하단(X1)부터 CCW가 되도록 재정렬 (AB 기준)
+            coords = _reindex_start_bottom_left_ccw(coords, midpoint_info)
             
             # YN 판단
             yn_value = 'Y'
             if bl_name in intersecting_cells:
                 yn_value = 'N'
-#            elif not all(boundary_polygon.contains(Point(c)) or 
-#                        boundary_polygon.touches(Point(c)) for c in coords):
-#                yn_value = 'N'
             
-            # 중점 계산
+            # 중점 계산 (정사각형 셀만)
             midpoints = calculate_midpoints(coords) if yn_value == 'Y' else [""] * 8
             
             # 행 데이터 구성
@@ -413,11 +643,11 @@ def write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells, boundary
                 else:
                     row.extend(["", "", ""])
             
-            # 중점 좌표
-            row.extend(midpoints[:2] + ["0.0" if yn_value == 'Y' else ""])  # Top
-            row.extend(midpoints[2:4] + ["0.0" if yn_value == 'Y' else ""]) # Bottom
-            row.extend(midpoints[4:6] + ["0.0" if yn_value == 'Y' else ""]) # Left
-            row.extend(midpoints[6:8] + ["0.0" if yn_value == 'Y' else ""]) # Right
+            # 중점 좌표 (XT, XB, XL, XR)
+            row.extend(midpoints[2:4] + ["0.0" if yn_value == 'Y' else ""])  # Top
+            row.extend(midpoints[:2] + ["0.0" if yn_value == 'Y' else ""])   # Bottom
+            row.extend(midpoints[4:6] + ["0.0" if yn_value == 'Y' else ""])  # Left
+            row.extend(midpoints[6:8] + ["0.0" if yn_value == 'Y' else ""])  # Right
             
             # 기타 필드
             row.extend(["", "", yn_value, ""])
@@ -451,10 +681,6 @@ def visualize_grid_cells(grid_cells, df0, df1, df2, intersecting_cells=None):
         centroid = poly.centroid
         ax.text(centroid.x, centroid.y, cell['cell_name'], 
                 fontsize=6, ha='center', va='center')
-        # ✨ X1 좌표 (좌측 하단) 표시 추가
-        #x1, y1 = cell['vertices'][1]  # 첫 번째 꼭짓점이 좌측 하단
-        #ax.plot(x1, y1, 'bo', markersize=4)  # 파란색 점으로 표시
-        #ax.text(x1, y1, '1', fontsize=5, ha='right', va='top', color='blue')
     
     # 경계선 그리기
     ax.plot(df1['x'], df1['y'], 'r-', linewidth=2, label='df1 (좌측)')
@@ -470,43 +696,16 @@ def visualize_grid_cells(grid_cells, df0, df1, df2, intersecting_cells=None):
     plt.tight_layout()
     plt.show()
 
+
 def reorder_polygon_vertices_to_bottom_left(poly, midpoint_info):
-    """폴리곤의 꼭짓점을 AB 기준 좌표계에서 좌측 하단부터 시작하도록 재정렬"""
-    coords = list(poly.exterior.coords)[:-1]  # 마지막 중복점 제거
-    
+    """폴리곤 꼭짓점을 AB 기준 좌표계에서 좌하단부터 시작하도록 재정렬(CCW 보장)"""
+    coords = list(poly.exterior.coords)[:-1]
     if len(coords) < 3:
         return coords
-    
-    # AB 정보에서 회전 각도 계산
-    if midpoint_info is not None and len(midpoint_info) > 0:
-        pt_A = np.array([midpoint_info.iloc[0]['A_x'], midpoint_info.iloc[0]['A_y']])
-        pt_B = np.array([midpoint_info.iloc[0]['B_x'], midpoint_info.iloc[0]['B_y']])
-    else:
-        # midpoint_info가 없으면 기본값 사용
-        return coords
-    
-    # AB 벡터를 기준으로 회전 각도
-    AB_vec = pt_B - pt_A
-    angle = np.arctan2(AB_vec[1], AB_vec[0])
-    
-    # 회전 행렬
-    cos_a, sin_a = np.cos(-angle), np.sin(-angle)
-    rotation_matrix = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
-    
-    # 모든 점을 회전시켜 좌측 하단 찾기
-    rotated_points = []
-    for i, coord in enumerate(coords):
-        rotated = rotation_matrix @ np.array(coord)
-        rotated_points.append((i, rotated[0], rotated[1], coord))
-    
-    # 좌측 하단 점 찾기: x가 가장 작고, x가 같으면 y가 가장 작은 점
-    rotated_points.sort(key=lambda p: (p[1], p[2]))
-    bottom_left_idx = rotated_points[0][0]
-    
-    # 해당 점부터 시작하도록 재정렬
-    reordered = coords[bottom_left_idx:] + coords[:bottom_left_idx]
-    
-    return reordered
+    # 좌하단 시작 + CCW
+    ordered = _reindex_start_bottom_left_ccw(coords, midpoint_info)
+    return ordered
+
 
 def main():
     # 명령줄 인자 처리
@@ -566,15 +765,15 @@ def main():
         LineString(list(zip(df2['x'], df2['y'])))
     ]
     
-    # ✨ midpoint_info 전달
+    # midpoint_info 전달
     intersecting_cells, inside_polygons = split_intersecting_cells(
         grid_cells, boundary_lines, boundary_polygon, midpoint_info
     )
     
     # 7. CSV 저장
     print(f"\n▶ CSV 저장 중...")
-    write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells, 
-                      boundary_polygon, args.output)
+    write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells,
+                      boundary_polygon, args.output, midpoint_info)
     
     # 8. 시각화
     #print(f"\n▶ 시각화 중...")
