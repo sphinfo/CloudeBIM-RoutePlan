@@ -317,11 +317,11 @@ class PolygonSplitter:
 def main():
     # 명령줄 인자 처리
     parser = argparse.ArgumentParser(description='부지 폴리곤을 두 영역으로 분할')
-    parser.add_argument('-i', '--input', default='input/부지모델test2.csv', 
+    parser.add_argument('-i', '--input', default='input/광명부지모델2.csv', 
                        help='입력 CSV 파일')
-    parser.add_argument('-a', '--idx_a', type=int, default=1, 
+    parser.add_argument('-a', '--idx_a', type=int, default=3, 
                        help='시작점 A의 번호')
-    parser.add_argument('-b', '--idx_b', type=int, default=9, 
+    parser.add_argument('-b', '--idx_b', type=int, default=7,
                        help='시작점 B의 번호')
     parser.add_argument('-n', '--divisions', type=int, default=100, 
                        help='경로 분할 개수')
@@ -346,7 +346,6 @@ def main():
         
     except Exception as e:
         print(f"❌ 오류 발생: {e}")
-        raise e
         return 1
     
     return 0
