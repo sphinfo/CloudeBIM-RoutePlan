@@ -62,13 +62,15 @@ class DozerAlloc():
         (
             e, s, h, l, obstacle_cells, tmp_start_line,
             required_line_change_distance, equipment_length,
-            equipment, distances, turning_radius, repeated_rate,
-            end_line, gap, safety_line_df1, safety_line_df2
+            distances, end_line,
+            equipment_width, blade_width,
+            front_cells, back_cells, cell_size
         ) = map(
             param.get, ['e', 's', 'h', 'l', 'obstacle_cells', 'start_line',
                         'required_line_change_distance', 'equipment_length',
-                        'equipment', 'distances', 'turning_radius', 'repeated_rate',
-                        'end_line', 'gap', 'safety_line_df1', 'safety_line_df2'])
+                        'distances', 'end_line',
+                        'equipment_width', 'blade_width',
+                        'front_cells', 'back_cells', 'cell_size'])
 
         # v1.1.0 두 칸 고정
         BUFFER_CELL_COUNT = 2
@@ -79,6 +81,21 @@ class DozerAlloc():
             block = Block.get_block_by_name(self.block_items, block_name)
             logging.getLogger('alloc').debug(f'{block["block_name"]}, YN: {block["yn"]} -> N, fill: {block["fill_vol"]} -> 0, cut: {block["cut_vol"]} -> 0, total: {block["total_vol"]} -> 0')
             block['yn'], block['fill_vol'], block['cut_vol'], block['total_vol'] = 'N', 0, 0, 0
+
+        # v1.3.0 장애물에 의한 진입 불가 셀 판별
+        # v1.3.0 장애물 회피에 필요한 셀 개수 계산(행 방향)
+        effective_working_width = max(equipment_width, blade_width)/2
+        c_num = math.ceil(effective_working_width / cell_size)
+        logging.getLogger('alloc').debug(f'v1.3.0 장애물에 의한 진입 불가 셀 판별, effective_working_width: {effective_working_width}, cell_size: {cell_size}, c_num: {c_num}')
+
+        # v1.3.0 BL_i_j(장애물 셀)기준 좌우로 C_num 만큼 이동 가능 여부 N으로 변경, 절성토량 삭제
+        for block_name in obstacle_cells:
+            block = Block.get_block_by_name(self.block_items, block_name)
+            _i, _j = Block.get_bl_i_j(block)
+            for idx in range(_i - c_num, _i + c_num + 1):
+                if idx != _i and self.block_items.get(_j, {}).get(idx, {}).get("yn") == 'Y':
+                    logging.getLogger('alloc').debug(f'v1.3.0 BL_i_j({block["block_name"]})기준 {'좌' if idx < _i else '우'}로 {self.block_items[_j][idx]["block_name"]} 이동 가능 여부 N으로 변경, 절성토량 삭제')
+                    block['yn'], block['fill_vol'], block['cut_vol'], block['total_vol'] = 'N', 0, 0, 0
 
         # M == 1? 경로 생성 불가
         if self.M < 2:
@@ -105,14 +122,9 @@ class DozerAlloc():
 
                 logging.getLogger('alloc').debug(f'해당 셀({block["block_name"]})의 전, 후방 이동점 재생성 완료, {block}')
 
-        # v1.1.0 그레이더 일 경우 라인변경에 필요한 거리 다시 계산
-        logging.getLogger('alloc').debug(f'작업 장비가 도저인가? {equipment == "grader"} equipment: {equipment}')
-        if equipment == 'grader':
-            logging.getLogger('alloc').debug(f'required_line_change_distance: {required_line_change_distance} -> {turning_radius * 1.3 * (1 - repeated_rate) / 7.5 * 10}')
-            required_line_change_distance = turning_radius * 1.3 * (1 - repeated_rate) / 7.5 * 10 
 
         # v1.1.0 Start Line 계산
-        start_line = self.get_start_line(tmp_start_line, distances, required_line_change_distance=required_line_change_distance, equipment_length=equipment_length)
+        start_line = self.get_start_line(tmp_start_line, distances, required_line_change_distance=required_line_change_distance, equipment_length=equipment_length, front_cells=front_cells)
         logging.getLogger('alloc').debug(f'최소 Start Line 계산 및 변경, {tmp_start_line} -> {start_line}')
 
         if end_line is not None and start_line > end_line:
@@ -147,6 +159,11 @@ class DozerAlloc():
 
                     # v1.1.0 h_num=calculate_space(j, required_line_change_distance)
                     h_num = calculate_space(j, required_line_change_distance, distances)
+
+                    # v1.3.0
+                    logging.getLogger('alloc').debug(f'h_num += back_cells({back_cells}), h_num: {h_num} -> {h_num + back_cells}')
+                    h_num += back_cells
+                    
                     # v1.1.0 space=calculate_space(j-h_num, equipment_length)
                     space=calculate_space(j-h_num, equipment_length, distances)
 
@@ -167,7 +184,7 @@ class DozerAlloc():
                             moveable = False
                             break
 
-                    logging.getLogger('alloc').debug(f'현재셀(BL_i_j(BL_{i}_{j}))의 H_num+space({h_num + space})만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num)은 이동가능(Y) 셀인가?: {moveable}, {recent_cells}')
+                    logging.getLogger('alloc').debug(f'현재셀(BL_i_j(BL_{i}_{j}))의 H_num({h_num}), space({space}) H_num+space({h_num + space})만큼의 셀들(BL_i_j-1, BL_i_j-2 … BL_i_j-H_num)은 이동가능(Y) 셀인가?: {moveable}, {recent_cells}')
                     
                     if moveable:
                         # v1.1.0  S_num=calculate_s_num(j)
@@ -429,7 +446,7 @@ class DozerAlloc():
 
         return self.outline_cell
 
-    def get_start_line(self, tmp_start_line: int, distances: list, required_line_change_distance: int, equipment_length: int):
+    def get_start_line(self, tmp_start_line: int, distances: list, required_line_change_distance: int, equipment_length: int, front_cells: int):
         cumulative_distance = 0
         for num in range(len(distances)):
             cumulative_distance += distances[num]
@@ -447,6 +464,9 @@ class DozerAlloc():
                 break
         
         min_start_line = num + 1
+
+        # v1.3.0
+        min_start_line += front_cells
 
         return min_start_line + 1 if tmp_start_line <= min_start_line else tmp_start_line
             
