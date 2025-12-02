@@ -239,7 +239,55 @@ def create_grid_cells_from_midpoint(df1, df2, cell_size, df0=None, basename='', 
                     'area': cell_size * cell_size,
                     'is_boundary': not boundary_polygon.contains(centroid)  # 경계 셀 표시
                 })
-    
+        # 7.5 AB 기준선 기준으로 불필요한 셀 제거
+    #  - AB 선분(pt_A -> pt_B)을 기준으로, 중심선(df0)의 "주된 위치"와
+    #    같은 쪽에 있는 셀만 남기고 반대쪽 셀은 제거한다.
+    if grid_list:
+        def _side_sign(point_xy: np.ndarray) -> float:
+            """점이 AB 직선의 어느 쪽에 있는지 부호(양수/음수/0)를 반환"""
+            v = point_xy - pt_A
+            return AB_vec[0] * v[1] - AB_vec[1] * v[0]
+
+        base_sign = None
+
+        # 1) df0가 있으면 df0 전체를 기준으로 다수결로 방향 선택
+        if df0 is not None and len(df0) > 0:
+            s_list = []
+            for _, row in df0.iterrows():
+                s = _side_sign(np.array([row['x'], row['y']]))
+                if abs(s) > 1e-9:  # 선 위에 거의 있는 점은 제외
+                    s_list.append(s)
+
+            if s_list:
+                pos_cnt = sum(1 for s in s_list if s > 0.0)
+                neg_cnt = sum(1 for s in s_list if s < 0.0)
+                if pos_cnt > 0 or neg_cnt > 0:
+                    # 양수/음수 중 더 많은 쪽을 기준 부호로 사용
+                    base_sign = 1.0 if pos_cnt >= neg_cnt else -1.0
+
+        # 2) df0로 결정이 안 되면, 경계 폴리곤의 중심을 기준으로 시도
+        if base_sign is None:
+            c = boundary_polygon.centroid
+            s_c = _side_sign(np.array([c.x, c.y]))
+            if abs(s_c) > 1e-9:
+                base_sign = 1.0 if s_c > 0.0 else -1.0
+
+        # 3) base_sign을 정했을 때만 필터 적용 (못 정하면 그대로 둠)
+        if base_sign is not None:
+            filtered_grid_list = []
+            for cell in grid_list:
+                # 셀 중심 좌표 (vertices 평균 사용)
+                xs, ys = zip(*cell['vertices'])
+                cx = sum(xs) / len(xs)
+                cy = sum(ys) / len(ys)
+                s = _side_sign(np.array([cx, cy]))
+                # 기준 부호와 같은 쪽(또는 거의 선 위)에 있는 셀만 유지
+                if s * base_sign >= -1e-9:
+                    filtered_grid_list.append(cell)
+
+            grid_list = filtered_grid_list
+
+
     # 8. BL 번호 매기기 - AB가 바닥이 되도록 y 기준 정렬
     if not grid_list:
         return []
@@ -599,6 +647,7 @@ def write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells, boundary
     rows = []
     idx = 1
     
+    orig_poly_map = {cell['cell_name']: Polygon(cell['vertices']) for cell in grid_cells}
     # 모든 셀을 딕셔너리로 변환 (교차 셀은 inside_polygons가 대체)
     all_cells = {}
     for cell in grid_cells:
@@ -626,9 +675,23 @@ def write_cells_to_csv(grid_cells, inside_polygons, intersecting_cells, boundary
             coords = _reindex_start_bottom_left_ccw(coords, midpoint_info)
             
             # YN 판단
+            # --- Y/N 판단 (경계 교차여도 남은 면적이 1/2 이상이면 Y) ---
             yn_value = 'Y'
             if bl_name in intersecting_cells:
-                yn_value = 'N'
+    # full(원본) 폴리곤과 경계의 교집합 면적을 이용해 비율 판정
+                orig_poly = orig_poly_map.get(bl_name)
+                if orig_poly is not None:
+                    full_area = orig_poly.area
+                    inter_area = orig_poly.intersection(boundary_polygon).area
+        # 수치오차 여유를 조금 두고 비교
+                    if inter_area + 1e-10 >= 0.5 * full_area:
+                        yn_value = 'Y'
+                    else:
+                        yn_value = 'N'
+                else:
+        # 혹시 모를 키 누락 시 기존 동작 유지
+                    yn_value = 'N'
+
             
             # 중점 계산 (정사각형 셀만)
             midpoints = calculate_midpoints(coords) if yn_value == 'Y' else [""] * 8
