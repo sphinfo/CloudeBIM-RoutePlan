@@ -279,8 +279,7 @@ def get_requierd_dist_for_line_change_num(line_change_way, min_node_dist, turnin
     elif line_change_way == 2 : # 2:후진 중 변경
         required_dist_for_line_change = 0
     else : # 3: 삼점 회전법
-        required_dist_for_line_change = turning_radius * 2
-    
+        required_dist_for_line_change = turning_radius
     node_num = math.ceil(required_dist_for_line_change/min_node_dist)
     
     return node_num+1
@@ -375,6 +374,66 @@ def line_change(line1, line2):
 
     return pd.DataFrame(points)
 
+def get_blade_front_distance_num(blade_front_distance, min_node_dist) : 
+
+    blade_front_distance_num = math.ceil(blade_front_distance/min_node_dist)
+    
+    return blade_front_distance_num
+
+
+
+def curve(x0,y0,x1,y1, turning_radius, starting_position, starting_direction,each_line_dist,j,index,exact_y,reverse = False):
+
+    r = turning_radius
+    d = np.sqrt((r**2)*2)
+    A = np.arccos((2*r*r-d*d)/(2*r*r))
+
+    print(np.degrees(A))
+    rad = A
+
+    
+    is_latter = index > exact_y // 2
+    is_standard = (starting_position == "1" and starting_direction == "A") or \
+                (starting_position == "2" and starting_direction == "B")
+    is_even = (j % 2 == 0)
+
+    if starting_position == "1":
+        if (is_latter and is_standard) or (not is_latter and not is_standard):
+            rad = -rad if is_even else rad
+        else:
+            rad = rad if is_even else -rad
+
+    elif starting_position == "2":
+        if (is_latter and is_standard) or (not is_latter and not is_standard):
+            rad = -rad if is_even else rad
+        else:
+            rad = rad if is_even else -rad
+
+    
+    num = 10
+    num = num-1
+    angle_increment = rad / (num)
+    points_x = []
+    points_y = []
+    for i in range(0, num+1) :
+        cur_rad = i * angle_increment
+        x2 = float(np.cos(cur_rad)*(x1-x0) - np.sin(cur_rad)*(y1-y0) + x0)
+        y2 = float(np.sin(cur_rad)*(x1-x0) + np.cos(cur_rad)*(y1-y0) + y0) 
+        points_x.append(x2)
+        points_y.append(y2)
+    
+
+        print(f"Point {i}: ({x2}, {y2})")
+
+    total_points = pd.DataFrame({
+        'x': points_x,
+        'y': points_y
+    })
+
+    if reverse:
+        total_points = total_points[::-1].reset_index(drop=True)
+    return total_points
+
 # csv 통합
 def combine_and_save_waypoints(forward_waypoints, backward_waypoints, output_file):
     combined = []
@@ -397,7 +456,6 @@ def combine_and_save_waypoints(forward_waypoints, backward_waypoints, output_fil
     #         backward_output_file = f"backward_waypoint_{cycle}_{i+1}.csv"
     #         forward_line.to_csv(forward_output_file, index=False)
     #         backward_line.to_csv(backward_output_file, index=False)
-
 def main():
     # input 값 입력하기
     equipment_width = args['equipment_width']
@@ -418,6 +476,7 @@ def main():
     cycle_num = args['cycle_num'] # 싸이클 횟수
     line_change_way = args['line_change_way'] # 1:후진 후 변경, 2:후진 중 변경, 3:3점회전법
     obstacles = args['obstacles']
+    blade_front_distance = args["blade_front_distance"]
     # df0 노드 사이간 거리 집합
     distances_each_line_node = dist_each_node(df0)
     # 노드 추가
@@ -439,13 +498,17 @@ def main():
     min_start_line = required_dist_for_line_change_num + space # start_line 최소값
     
     max_start_line = len(df1)-1
-    if line_change_way == 2 : # 후진 중 변경 최대 start_line 값
-        max_start_line = len(df0)-space-required_dist_for_line_change_num
-    
-    if line_change_way == 3:
-        max_end_line = len(df1)-required_dist_for_line_change_num # end_line 최대값
-    else :
-        max_end_line = len(df1)-1
+    if blade_front_distance > 0 :
+        blade_front_distance_num = get_blade_front_distance_num(blade_front_distance, min_node_dist)
+        if line_change_way == 1 or line_change_way == 2 :
+            max_end_line = len(df1) - blade_front_distance_num
+        elif line_change_way == 3 :
+            max_end_line = min(len(df1)-required_dist_for_line_change_num - space, len(df1) - blade_front_distance_num) 
+    else:
+        if line_change_way == 1 or line_change_way == 2 :
+            max_end_line = len(df1) - 1
+        elif line_change_way == 3:
+            max_end_line = len(df1)- required_dist_for_line_change_num - space
 
     # starting_direction == B 일 경우
     if starting_direction == "B" :
@@ -503,6 +566,7 @@ def main():
     non_work_backward_line_1 = {}
     work_forward_line = {}
     non_work_forward_line_2 = {}
+    non_work_backward_line_2 = {}
 
     segmented_work_zones = [[None] * 4 for _ in range(exact_y)]  # 한 번만 초기화
 
@@ -527,6 +591,7 @@ def main():
 
         # 비작업구역에서의 후진 노드
         non_work_backward_line_1[i] = non_work_forward_line_1[i].iloc[::-1].reset_index(drop=True)
+        non_work_backward_line_2[i] = non_work_forward_line_2[i].reset_index(drop=True)
 
         # 장애물을 고려하여 work_forward_line[i]를 다시 네 부분으로 나눔
         obstacle_info = next((obs for obs in obstacles if obs[0] == i), None)
@@ -644,8 +709,6 @@ def main():
                     next_non_work_backward = non_work_backward_line_1[next_line_index]
                     transition_backward = line_change(non_work_backward_line_1[index], next_non_work_backward)
                     backward_path = pd.concat([backward_path, transition_backward], ignore_index=True)
-                
-            
                 if index != first_line_index : 
                     final_path = pd.concat([non_work_forward_line_1[index], final_path], ignore_index=True)
             
@@ -679,63 +742,170 @@ def main():
                     backward_waypoints[current_cycle][j] = new_backward_line
 
     elif line_change_way == 3:
-        for i in range(cycle_num):
-            current_cycle = i
-            forward_waypoints.setdefault(current_cycle, {})
-            backward_waypoints.setdefault(current_cycle, {})
-            if starting_position == 2:
-                for j in range(exact_y):
-                    if j%2 == 0:
-                        forward_line = work_forward_line[j][::-1].reset_index(drop=True)
-                    else:
-                        forward_line = work_forward_line[j]
-                    print("forward_line2:" , forward_line)
-            else:
-                for j in range(exact_y):
-                    if j%2 == 0:
-                        forward_line = work_forward_line[j]
-                    else:
-                        forward_line = work_forward_line[j].reset_index(drop=True)[::-1]
-                    print("forward_line1:" , forward_line)
-            if starting_direction == "B":
-                for j in range(exact_y):
-                    if j%2 == 0:
-                        forward_line = work_forward_line[j]
-                    else:
-                        forward_line = work_forward_line[j][::-1].reset_index(drop=True)
-                    print("forward_lineA:" , forward_line)
-            else:
-                for j in range(exact_y):
-                    if j%2 == 0:
-                        forward_line = work_forward_line[j][::-1].reset_index(drop=True)
-                    else:
-                        forward_line = work_forward_line[j]
-                    print("forward_lineB:" , forward_line)
-            non_work_forward_line_1[i] =non_work_forward_line_1[i][::-1].reset_index(drop=True)
-       
-    
-            print("non_work_forward_line1:",non_work_forward_line_1)
-            print("non_work_forward_line :", non_work_forward_line_2)
-            # work_forward_line.append(non_work_forward_line_1[current_cycle])
-            for j in range(exact_y):
-                index = get_index(j, exact_y, starting_position, current_cycle)
-                forward_waypoints[current_cycle][j] = work_forward_line[index]
-                print("index :", index)
-                print("exact_y :", exact_y)
-                # backward_waypoints[current_cycle][j] 
-                next_line_index, previous_line_index, first_line_index, last_line_index = get_next_line_index(starting_position, current_cycle, index, exact_y) 
-                current_line_waypoints = forward_waypoints[current_cycle][j]
+        print("-------------------------------")
+        print(" endline/startline : ", max_end_line / min_start_line)
+        print("max_end_line:", max_end_line)
 
-                if starting_position == "2":  
-                    next_line_waypoints = work_forward_line[next_line_index+1]
+        if min_distance  <= turning_radius * 2:
+            print("3점 회전 불가") 
+            line_change_way = input(int())
+        else:
+            for i in range(cycle_num):
+                
+                current_cycle = i
+                forward_waypoints.setdefault(current_cycle, {})
+                backward_waypoints.setdefault(current_cycle, {})      
+                
+                        
+                for j in range(exact_y):
+                    
+                    index = get_index(j, exact_y, starting_position, current_cycle)  # 현재 라인 인덱스 가져오기
+                    non_work_forward_line_1[j] = non_work_forward_line_1[j][::-1].reset_index(drop=True) 
+                    # 장애물 회피 및 경로 설정
+                    segment_1 = segmented_work_zones[index][0]
+                    segment_2 = segmented_work_zones[index][1]
+                    segment_3 = segmented_work_zones[index][2]
+                    segment_4 = segmented_work_zones[index][3]
 
-                else:
-                    next_line_waypoints = work_forward_line[next_line_index-1]
-                new_forward_line = line_change(current_line_waypoints, next_line_waypoints)
-                if j % 2 == 0:
-                    forward_waypoints[current_cycle][j] = new_forward_line
-                else:
-                    forward_waypoints[current_cycle][j] = new_forward_line[::-1]
+                    if segment_1 is not None and not segment_1.empty:
+                        final_path = segment_1.copy()
+                    else:
+                        final_path = pd.DataFrame(columns=['x', 'y'])
+                        
+                    next_line_index, previous_line_index, first_line_index, last_line_index = get_next_line_index(starting_position, current_cycle, index, exact_y)          
+
+                    if segment_2 is not None and not segment_2.empty:
+                        start_index_2 = segment_2.index[0]
+                        end_index_2 = segment_2.index[-1]
+                        start_index_3 = segment_3.index[0]
+                        end_index_3 = segment_3.index[-1] 
+                        print("required_dist_for_line_change_num : ", required_dist_for_line_change_num)
+                        print("start_index_2 : ", start_index_2)
+                        print("end-index_2 : ", end_index_2)
+
+                        if index == first_line_index :
+                            next_segment_2 = work_forward_line[next_line_index].iloc[start_index_2:end_index_2].reset_index(drop=True)
+                            next_segment_3 = work_forward_line[next_line_index].iloc[start_index_3:end_index_3].reset_index(drop=True)
+                        else :
+                            next_segment_2 = work_forward_line[previous_line_index].iloc[start_index_2:end_index_2].reset_index(drop=True)
+                            next_segment_3 = work_forward_line[previous_line_index].iloc[start_index_3:end_index_3].reset_index(drop=True)
+                    segment_2 = segment_2.reset_index(drop=True)
+                    segment_3 = segment_3.reset_index(drop=True)
+
+                    if segment_2 is not None and not segment_2.empty:
+                        transition_to_next = line_change(segment_2, next_segment_2)
+                        final_path = pd.concat([final_path, transition_to_next], ignore_index=True)
+
+                    if segment_3 is not None and not segment_3.empty:
+                        # 현재 라인으로 복귀
+                        transition_to_current = line_change(next_segment_3, segment_3)
+                        final_path = pd.concat([final_path, transition_to_current], ignore_index=True)
+
+                    if segment_4 is not None and not segment_4.empty:
+                        final_path = pd.concat([final_path, segment_4], ignore_index=True)
+                    
+                    work_forward_line[index] = final_path
+                    current_line_waypoints = work_forward_line[index]
+                    
+                    
+                    if index != last_line_index:
+                        current_line_waypoints = work_forward_line[index]
+                        next_line_waypoints = work_forward_line[next_line_index]
+                        nindex = next_line_index
+                    
+                        if index <= exact_y // 2:
+                            for k in range(1,exact_y):
+                                each_line_dist =dist(work_forward_line[index].iloc[-1],work_forward_line[index+k].iloc[-1])
+                                print("each_line_dist:",each_line_dist)
+                                if each_line_dist >= turning_radius:
+                                    nindex = index+k
+                                    if index + k == next_line_index:
+                                        nindex = next_line_index
+                                    print(f"nindex: {nindex}, next_line_index: {next_line_index}")
+                                    break
+                                else:
+                                    continue
+                        else:
+                            for k in range(1,exact_y):
+                                each_line_dist =dist(work_forward_line[index].iloc[-1],work_forward_line[index-k].iloc[-1])
+                                if each_line_dist >= turning_radius:
+                                    nindex = index-k
+                                    if index - k == next_line_index:
+                                        nindex = next_line_index
+                                    print(f"nindex: {nindex}, next_line_index: {next_line_index}")
+                                    break
+                                else:
+                                    continue
+                        
+                        if j%2 == 0:
+                            print("index:",index)
+                            print("next_line_index:",next_line_index)
+                            x0 = work_forward_line[nindex]["x"].iloc[-1] #첫 번째 회전(전진 경로)
+                            y0 = work_forward_line[nindex]["y"].iloc[-1]
+                            x1 = work_forward_line[index]["x"].iloc[-1]
+                            y1 = work_forward_line[index]["y"].iloc[-1]
+                            curve1 = curve(x0,y0,x1,y1, turning_radius, starting_position, starting_direction,each_line_dist, j,index,exact_y,reverse = False)
+                            print("curve1:", curve1)
+                            dx = work_forward_line[nindex]["x"].iloc[-1] - curve1["x"].iloc[-1]
+                            dy = work_forward_line[nindex]["y"].iloc[-1] - curve1["y"].iloc[-1]
+                            print("dx:",dx)
+                            print("dy:",dy)
+                            x0 = curve1["x"].iloc[-1] - dx #두 번째 회전(후진 경로)
+                            y0 = curve1["y"].iloc[-1] - dy
+                            x1 = curve1["x"].iloc[-1]
+                            y1 = curve1["y"].iloc[-1]
+                            curve2 = curve(x0,y0,x1,y1, turning_radius, starting_position, starting_direction,each_line_dist, j,index,exact_y,reverse = False)
+                            print("curve2:", curve2)
+                            print("x0:",x0)
+                            print("y0:",y0)                    
+                    
+                            new_forward_line = pd.concat([current_line_waypoints,curve1], ignore_index=True)
+                            new_backward_line = curve2
+                            
+
+                        else:
+                            print("index:",index)
+                            print("next_line_index:", next_line_index)
+                            x0 = work_forward_line[nindex]["x"].iloc[0] #첫 번째 회전(전진 경로)
+                            y0 = work_forward_line[nindex]["y"].iloc[0]  
+                            x1 = work_forward_line[index]["x"].iloc[0] 
+                            y1 = work_forward_line[index]["y"].iloc[0]
+                            
+                            print("xxxx0:", x0)
+                            print("yyyy0:", y0)
+                            print("xxxx1:", x1)
+                            print("yyyy1:", y1)
+                            curve3 = curve(x0,y0,x1,y1, turning_radius, starting_position, starting_direction,each_line_dist, j,index,exact_y,reverse = True)
+                        
+                            print("curve3:",curve3)
+                            dx = work_forward_line[nindex]["x"].iloc[0] - curve3["x"].iloc[0]
+                            dy = work_forward_line[nindex]["y"].iloc[0] - curve3["y"].iloc[0]
+                            print("dx:",dx)
+                            print("dy:",dy)
+                            x0 = curve3["x"].iloc[0] - dx #두 번째 회전(후진 경로)
+                            y0 = curve3["y"].iloc[0] - dy
+                            x1 = curve3["x"].iloc[0]
+                            y1 = curve3["y"].iloc[0]
+                            curve4 = curve(x0,y0,x1,y1, turning_radius, starting_position, starting_direction, each_line_dist,j,index,exact_y,reverse = True)
+                            
+                            print("curve4:",curve4)
+                            
+                            new_forward_line = pd.concat([curve3,current_line_waypoints], ignore_index=True)
+                            new_backward_line = curve4
+                            
+                    else:
+                        new_forward_line = current_line_waypoints
+                        new_backward_line = pd.DataFrame(columns=['x', 'y'])   # 마지막 후진 경로 빈 데이터 처리
+                
+
+                    if j % 2 == 0:
+                        forward_waypoints[current_cycle][j] = new_forward_line
+                        backward_waypoints[current_cycle][j] = new_backward_line
+                        print(f"forward_waypoints{current_cycle}{j}", forward_waypoints[current_cycle][j])
+                    else:
+                        forward_waypoints[current_cycle][j] = new_forward_line[::-1].reset_index(drop=True)
+                        backward_waypoints[current_cycle][j] = new_backward_line[::-1].reset_index(drop=True)
+                        print(f"forward_waypoints{current_cycle}{j}", forward_waypoints[current_cycle][j])                                    
     # ---------------------------
     # direction 컬럼을 블록 외부에서 일괄 설정
     # ---------------------------
