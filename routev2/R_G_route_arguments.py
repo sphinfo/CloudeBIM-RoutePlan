@@ -19,6 +19,7 @@ parser.add_argument('--input_ground_gpkg_file', type=str, required=False, help='
 parser.add_argument('--start_line', type=int,   default=0, required=False, help='시작라인 Index')
 parser.add_argument('--end_line', type=int,   default=1, required=False, help='끝라인 Index')
 parser.add_argument('--obstacles', type=str, required=False, default='-', help='장애물 Index')
+parser.add_argument('--blade_front_distance', type=float, required=False, default='1.5', help='blade까지 거리')
 
 
 args = {k: v for k, v in parser.parse_args().__dict__.items() if v is not None}
